@@ -6,6 +6,7 @@ import sqlite3
 import argparse
 import unitypack
 import obj_to_yaml
+import utils
 
 
 def create_db(db, files):
@@ -20,7 +21,7 @@ def create_db(db, files):
 		with open(file, "rb") as f:
 			bundle = unitypack.load(f)
 		# grab the file name from the full path
-		fname = os.path.splitext(os.path.basename(file))[0]
+		fname = utils.filename_no_ext(file)
 
 		for asset in bundle.assets:
 			for id, obj in asset.objects.items():
