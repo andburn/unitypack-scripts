@@ -2,6 +2,8 @@ import os
 
 
 def write_to_file(path, contents, mode="w", info=False):
+	if os.path.isfile(path):
+		print("WARNING: %s exists and will be overwritten" % (path))
 	with open(path, mode) as f:
 		written = f.write(contents)
 	if info:

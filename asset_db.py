@@ -59,9 +59,12 @@ def query_db(path, query, yaml, search = None):
 
 
 def print_row(row, yaml):
-	print("{0:22} - {2:12}\t{3:>15.15} | {1}".format(row[0], row[1], row[2], row[3]))
-	if yaml:
-		print(r[4])
+	if len(row) == 5:
+		print("{0:22} - {2:12}\t{3:>15.15} | {1}".format(row[0], row[1], row[2], row[3]))
+		if yaml:
+			print(r[4])
+	else:
+		print(row)
 
 
 def create(args):
