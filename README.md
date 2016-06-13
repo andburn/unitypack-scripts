@@ -1,3 +1,3 @@
-## python-unitypack scripts
+## UnityPack Scripts
 
-A selection of scritps for interacting with unity files using [python-unitypack](https://github.com/HearthSim/python-unitypack).
+A selection of scripts for interacting with Unity assets using [unitypack](https://github.com/HearthSim/python-unitypack).
