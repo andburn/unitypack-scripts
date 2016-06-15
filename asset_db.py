@@ -5,8 +5,8 @@ import glob
 import sqlite3
 import argparse
 import unitypack
-import obj_to_yaml
-import utils
+import utils.file as FileUtils
+import utils.serializer as YamlSerializer
 
 
 def create_db(db, files):
@@ -16,16 +16,20 @@ def create_db(db, files):
 	c.execute('''CREATE VIRTUAL TABLE assets USING
 		fts4 (fid, name, bundle, type, yaml)''')
 
-	yaml = obj_to_yaml.YamlWriter()
 	for file in files:
 		with open(file, "rb") as f:
 			bundle = unitypack.load(f)
 		# grab the file name from the full path
-		fname = utils.filename_no_ext(file)
+		fname = FileUtils.filename_no_ext(file)
 
 		for asset in bundle.assets:
+			print("Processing %s..." % (fname))
 			for id, obj in asset.objects.items():
-				d = obj.read()
+				try:
+					d = obj.read()
+				except Exception as e:
+					print("[Error] %d: %s" % (id, e))
+					continue
 				# try name field
 				name = "unknown"
 				try:
@@ -39,8 +43,10 @@ def create_db(db, files):
 				except Exception:
 					pass
 				# insert values
-				c.execute("INSERT INTO assets VALUES (?,?,?,?,?)",
-					(id, name, fname, type, yaml.write(d)))
+				c.execute(
+					"INSERT INTO assets VALUES (?,?,?,?,?)",
+					(id, name, fname, type, YamlSerializer.serialize(d))
+				)
 	conn.commit()
 	conn.close()
 
@@ -62,7 +68,7 @@ def print_row(row, yaml):
 	if len(row) == 5:
 		print("{0:22} - {2:12}\t{3:>15.15} | {1}".format(row[0], row[1], row[2], row[3]))
 		if yaml:
-			print(r[4])
+			print(row[4])
 	else:
 		print(row)
 
@@ -93,7 +99,8 @@ def search(args):
 
 def main():
 	parser = argparse.ArgumentParser(description="Creates or queries a HS asset database.")
-	subparsers = parser.add_subparsers()
+	subparsers = parser.add_subparsers(dest="command")
+	subparsers.required = True
 	# create db
 	parser_create = subparsers.add_parser("create", help="create a new db")
 	parser_create.add_argument("db_file", help="the new db's file path")
