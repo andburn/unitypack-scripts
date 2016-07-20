@@ -11,6 +11,9 @@ from PIL import ImageOps
 import utils.file as FileUtils
 
 
+EXCLUDES = ["sounds0"]
+
+
 def handle_asset(asset, handle_formats, dir, flip, objMesh, quiet):
 	for id, obj in asset.objects.items():
 		try:
@@ -90,10 +93,13 @@ def main():
 	files = args.files
 	if len(args.files) == 1:
 		if not args.files[0].endswith("unity3d"):
-			files = glob.glob(args.files + "/*.unity3d")
+			files = glob.glob(args.files[0] + "/*.unity3d")
 
 	for file in files:
 		bundle_name = FileUtils.filename_no_ext(file)
+		if bundle_name in EXCLUDES:
+			print("Skipping %s..." % (bundle_name))
+			continue
 		print("Extracting %s..." % (bundle_name))
 		save_path = os.path.join(args.output, bundle_name)
 
