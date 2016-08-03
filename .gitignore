@@ -2,6 +2,7 @@ unitypack
 out/
 sql/
 *.obj
+*.bat
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
