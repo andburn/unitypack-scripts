@@ -112,7 +112,7 @@ class Material:
 
 class GameObjectEncoder(json.JSONEncoder):
 	def default(self, obj):
-		if hasattr(obj, to_json):
+		if hasattr(obj, "to_json"):
 			return obj.to_json()
 		else:
 			print("%r does not implement to_json()" % (obj))
