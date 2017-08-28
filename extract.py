@@ -32,13 +32,13 @@ def handle_asset(asset, handle_formats, dir, flip, objMesh, quiet):
 		if otype == "Mesh":
 			try:
 				mesh_data = None
-				ext = ".js"
-				if objMesh:
-				 	mesh_data = OBJMesh(d).export()
-				 	ext = ".obj"
-				else:
+				
+				if not objMesh:
 					mesh_data = json_mesh.JSONMesh(d).export()
-				FileUtils.write_to_file(save_path + ext, mesh_data, mode="w")
+					FileUtils.write_to_file(save_path + ".js", mesh_data, mode="w")
+					
+				mesh_data = OBJMesh(d).export()
+				FileUtils.write_to_file(save_path + ".obj", mesh_data, mode="w")
 			except (NotImplementedError, RuntimeError) as e:
 				print("WARNING: Could not extract %r (%s)" % (d, e))
 				mesh_data = pickle.dumps(d._obj)
@@ -52,17 +52,21 @@ def handle_asset(asset, handle_formats, dir, flip, objMesh, quiet):
 
 		elif otype == "Texture2D":
 			filename = d.name + ".png"
-			image = d.image
-			if image is None:
-				print("WARNING: %s is an empty image" % (filename))
-				FileUtils.write_to_file(save_path + ".empty", "")
-			else:
-				if not quiet:
-					print("Decoding %r" % (d))
-				img = image
-				if flip:
-					img = ImageOps.flip(image)
-				img.save(save_path + ".png")
+			try:
+				image = d.image
+				if image is None:
+					print("WARNING: %s is an empty image" % (filename))
+					FileUtils.write_to_file(save_path + ".empty", "")
+				else:
+					if not quiet:
+						print("Decoding %r" % (d))
+					img = image
+					if flip:
+						img = ImageOps.flip(image)
+					img.save(save_path + ".png")
+			except Exception as e:
+				print("Failed to extract texture %s (%s)" % (d.name, e))
+
 
 
 def main():

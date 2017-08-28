@@ -8,7 +8,7 @@ import utils.serializer as YamlSerializer
 
 
 FILE_EXT = ".unity3d"
-EXCLUDES = ["sounds0"]
+EXCLUDES = ["sounds0", "dbf", "fonts0", "fontsjajp0", "fontsruru0"]
 
 
 def main():
