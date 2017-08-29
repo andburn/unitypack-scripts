@@ -1,0 +1,11 @@
+[[source]]
+url = "https://pypi.python.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+unitypack = {git = "https://github.com/HearthSim/UnityPack.git", editable=true}
+pyaml = "*"
+
+
+[dev-packages]
