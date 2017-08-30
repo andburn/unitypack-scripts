@@ -1,5 +1,53 @@
-import json
-from unitypack.export import MeshData
+class Vec2:
+	def __init__(self, x=0, y=0):
+		self.x = x
+		self.y = y
+
+	def __str__(self):
+		return "({0:.5f}, {1:.5f})".format(self.x, self.y)
+
+	def to_json(self):
+		return { "x": self.x, "y": self.y}
+
+
+class Vec3(Vec2):
+	def __init__(self, x=0, y=0, z=0):
+		super().__init__(x, y)
+		self.z = z
+
+	def __str__(self):
+		return "({0:.5f}, {1:.5f}, {2:.5f})".format(self.x, self.y, self.z)
+
+	def to_json(self):
+		return { "x": float("{0:.5f}".format(self.x)), "y": float("{0:.5f}".format(self.y)), "z": float("{0:.5f}".format(self.z)) }
+
+
+class Vec4(Vec3):
+	def __init__(self, x=0, y=0, z=0, w=0):
+		super().__init__(x, y, z)
+		self.w = w
+
+	def __str__(self):
+		return "({0:.5f}, {1:.5f}, {2:.5f}, {3:.5f})".format(self.x, self.y, self.z, self.w)
+
+	def to_json(self):
+		return { "x": float("{0:.5f}".format(self.x)), "y": float("{0:.5f}".format(self.y)), "z": float("{0:.5f}".format(self.z)), "w": float("{0:.5f}".format(self.w)) }
+
+
+class Color(Vec4):
+	def __init__(self, x=0, y=0, z=0, w=0):
+		super().__init__(x, y, z, w)
+		self.r = x
+		self.g = y
+		self.b = z
+		self.a = w
+
+	def __str__(self):
+		return super().__str__()
+
+	def to_json(self):
+		return { "r": self.r, "g": self.g, "b": self.b, "a": self.a }
+
 
 '''
 {
@@ -16,9 +64,10 @@ from unitypack.export import MeshData
     }
 }
 '''
-
 class JSONMesh:
 	def __init__(self, mesh):
+		from unitypack.export import MeshData
+
 		if mesh.mesh_compression:
 			# TODO handle compressed meshes
 			raise NotImplementedError("(%s) compressed meshes are not supported" % (mesh.name))
@@ -59,6 +108,8 @@ class JSONMesh:
 		return ret
 
 	def export(self):
+		import json
+
 		# check all elements exists
 		if not self.mesh_data.vertices or not self.mesh_data.normals or \
 				not self.mesh_data.uv1 or not self.mesh_data.indices:

@@ -1,14 +1,17 @@
 #!/usr/bin/env python
+
+"""Base on UnityPack's unityextract script"""
+
 import os
 import pickle
 import sys
 import glob
 import unitypack
 from unitypack.export import OBJMesh
-import json_mesh
 from argparse import ArgumentParser
 from PIL import ImageOps
-import utils.file as FileUtils
+import utils
+from objects import JSONMesh
 
 
 EXCLUDES = ["sounds0"]
@@ -27,28 +30,28 @@ def handle_asset(asset, handle_formats, dir, flip, objMesh, quiet):
 
 		d = obj.read()
 		save_path = os.path.join(dir, obj.type, d.name)
-		FileUtils.make_dirs(save_path)
+		utils.make_dirs(save_path)
 
 		if otype == "Mesh":
 			try:
 				mesh_data = None
-				
+
 				if not objMesh:
-					mesh_data = json_mesh.JSONMesh(d).export()
-					FileUtils.write_to_file(save_path + ".js", mesh_data, mode="w")
-					
+					mesh_data = JSONMesh(d).export()
+					utils.write_to_file(save_path + ".js", mesh_data, mode="w")
+
 				mesh_data = OBJMesh(d).export()
-				FileUtils.write_to_file(save_path + ".obj", mesh_data, mode="w")
+				utils.write_to_file(save_path + ".obj", mesh_data, mode="w")
 			except (NotImplementedError, RuntimeError) as e:
 				print("WARNING: Could not extract %r (%s)" % (d, e))
 				mesh_data = pickle.dumps(d._obj)
-				FileUtils.write_to_file(save_path + ".Mesh.pickle", mesh_data, mode="wb")
+				utils.write_to_file(save_path + ".Mesh.pickle", mesh_data, mode="wb")
 
 		elif otype == "TextAsset":
 			if isinstance(d.script, bytes):
-				FileUtils.write_to_file(save_path + ".bin", d.script, mode="wb")
+				utils.write_to_file(save_path + ".bin", d.script, mode="wb")
 			else:
-				FileUtils.write_to_file(save_path + ".txt", d.script)
+				utils.write_to_file(save_path + ".txt", d.script)
 
 		elif otype == "Texture2D":
 			filename = d.name + ".png"
@@ -56,7 +59,7 @@ def handle_asset(asset, handle_formats, dir, flip, objMesh, quiet):
 				image = d.image
 				if image is None:
 					print("WARNING: %s is an empty image" % (filename))
-					FileUtils.write_to_file(save_path + ".empty", "")
+					utils.write_to_file(save_path + ".empty", "")
 				else:
 					if not quiet:
 						print("Decoding %r" % (d))
@@ -100,7 +103,7 @@ def main():
 			files = glob.glob(args.files[0] + "/*.unity3d")
 
 	for file in files:
-		bundle_name = FileUtils.filename_no_ext(file)
+		bundle_name = utils.filename_no_ext(file)
 		if bundle_name in EXCLUDES:
 			print("Skipping %s..." % (bundle_name))
 			continue
