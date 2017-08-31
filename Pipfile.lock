@@ -105,10 +105,10 @@
         },
         "pyaml": {
             "hashes": [
-                "sha256:4c260fcc58cd452c87611b280c96823b0589d7caffaa4c11038b475f05326535",
-                "sha256:9cf5ff8fc3b82aab1428e67ab2040b52a9f39433517cb7c5b852498ed3a75740"
+                "sha256:d6cf7eb245384dce0920f68b7573978a24520c768a003ed2b7b05bd69ca9d38a",
+                "sha256:a9a3e83372072fc7dc1aebcab37d6f2e08fb8066f553f31d6fc9cb2ad0b515d3"
             ],
-            "version": "==17.8.0"
+            "version": "==17.10.0"
         },
         "pyyaml": {
             "hashes": [
@@ -131,8 +131,7 @@
         },
         "unitypack": {
             "editable": true,
-            "git": "https://github.com/HearthSim/UnityPack.git",
-            "ref": "ac325224324ba2f97e53b32145cd2fbc67610459"
+            "git": "https://github.com/HearthSim/UnityPack.git"
         }
     },
     "develop": {}

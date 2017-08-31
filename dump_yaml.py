@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 
-"""Based on UnityPack's unity2yaml script"""
+"""Dump all contents of all unity3d files in dir as yaml
+
+Based on UnityPack's unity2yaml script
+"""
 
 import os
 import sys
