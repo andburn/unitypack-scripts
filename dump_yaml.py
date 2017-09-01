@@ -43,8 +43,8 @@ def objectpointer_constructor(loader, node):
 
 def shader_representer(dumper, data):
 	obj = data._obj.copy()
-	if "m_SubProgramBlob" in obj:
-		obj["m_SubProgramBlob"] = "<stripped>"
+	if "compressedBlob" in obj:
+		obj["compressedBlob"] = "<stripped>"
 	return dumper.represent_mapping("!unitypack:stripped:Shader", obj)
 
 
@@ -57,7 +57,10 @@ def texture2d_representer(dumper, data):
 
 
 def mesh_representer(dumper, data):
-	return dumper.represent_mapping("!unitypack:stripped:Mesh", {data.name: None})
+	obj = data._obj.copy()
+	obj["m_IndexBuffer"] = "<stripped>"
+	obj["m_VertexData"] = "<stripped>"
+	return dumper.represent_mapping("!unitypack:stripped:Mesh", obj)
 
 
 def movietexture_representer(dumper, data):
