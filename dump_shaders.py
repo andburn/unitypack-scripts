@@ -16,14 +16,13 @@ from shaders import extract_shader, redefine_shader
 
 def main():
 	p = ArgumentParser()
-	p.add_argument("--dir", action="store_true")
 	p.add_argument("input")
 	p.add_argument("output")
 	args = p.parse_args(sys.argv[1:])
 
 	files = [args.input]
-	if args.dir:
-		files = glob.glob(args.input + "/*.unity3d")
+	if os.path.isdir(args.input):
+		files = glob.glob(args.input + "/*")
 
 	redefine_shader()
 

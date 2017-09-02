@@ -99,7 +99,7 @@ def main():
 
 	files = args.files
 	if len(args.files) == 1:
-		if not args.files[0].endswith("unity3d"):
+		if os.path.isdir(args.files[0]):
 			files = glob.glob(args.files[0] + "/*.unity3d")
 
 	for file in files:

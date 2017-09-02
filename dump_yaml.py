@@ -89,10 +89,10 @@ def main():
 	dir_in = sys.argv[1]
 	dir_out = sys.argv[2]
 
-	if dir_in.endswith(FILE_EXT):
-		files = [dir_in]
+	if os.path.isdir(dir_in):
+		files = glob.glob(dir_in + "/*")
 	else:
-		files = glob.glob(dir_in + "/*" + FILE_EXT)
+		files = [dir_in]
 
 	# define default representers and constructors for unity engine objects
 	for k, v in engine.__dict__.items():
@@ -121,11 +121,11 @@ def main():
 	for f in files:
 		bundle_name = filename_no_ext(f)
 		if bundle_name in EXCLUDES:
-			print("Skipping %s%s" % (bundle_name, FILE_EXT))
+			print("Skipping %s" % (bundle_name))
 			continue
 		else:
 			out_path = os.path.join(dir_out, bundle_name)
-			print("Extracting %s%s" % (bundle_name, FILE_EXT))
+			print("Extracting %s" % (bundle_name))
 
 		with open(f, "rb") as fin:
 			bundle = unitypack.load(fin)
