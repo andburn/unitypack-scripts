@@ -5,21 +5,21 @@
 import sys
 from pyparsing import (
 	Suppress, Word, Literal, OneOrMore, ZeroOrMore, Optional, Combine, SkipTo, 
-	Group, delimitedList, oneOf, alphas, alphanums, nums, stringEnd
+	Group, delimitedList, oneOf, alphas, alphanums, nums, stringEnd, Forward
 )
 
-LBRACE, RBRACE, LBRACK, RBRACK, LPAR, RPAR, LANG, RANG = map(Suppress, "{}[]()<>")
+LBRACE, RBRACE, LBRACK, RBRACK, LPAR, RPAR, LESS, GREAT = map(Suppress, "{}[]()<>")
 PLUS, DASH, SLASH, ASTERIX, PERCENT, EQ, DOT = map(Literal, "+-/*%=.")
-CARET, BAR, AMPERSAND, TILDE, BANG, COLON, SEMI, COMMA, HASH = map(Suppress, "^|&~!:;,#")
+CARET, BAR, AMPERSAND, TILDE, BANG, COLON, SEMI, COMMA, HASH, QUESTION = map(Suppress, "^|&~!:;,#?")
 
 
 def parse(text):
 	"""Run the parser on the given text"""
 
-	float_const = Combine(Word(nums) + DOT + Word(nums))
+	float_const = Combine(Optional(DASH) + Word(nums) + DOT + Word(nums))
 	float_const.setParseAction(lambda tokens : float(tokens[0]))
 
-	int_const = Word(nums).setParseAction(lambda tokens : int(tokens[0]))
+	int_const = Combine(Optional(DASH) + Word(nums)).setParseAction(lambda tokens : int(tokens[0]))
 	
 	const = float_const | int_const
 
@@ -42,15 +42,24 @@ def parse(text):
 	swizzle = Suppress(DOT) + Word("xyzw", min=1, max=4)
 	ident_swizzle = ident + Optional(swizzle).setResultsName("swizzle")
 
-	ident_list = delimitedList(ident_swizzle)
-	func_name = "texture2D min dot mix"
-	func_call = oneOf(func_name) + LPAR + ident_list + RPAR
-
 	operator = PLUS | DASH | ASTERIX
-	arith_expr = ident_swizzle + operator + ident_swizzle
-	compound_arith_expr = LPAR + arith_expr + RPAR + operator + ident_swizzle
+	comparator = (EQ + EQ) | (LESS + EQ) | (GREAT + EQ) | LESS | GREAT
+	
+	unary_ident = Optional(DASH) + ident_swizzle
+	arith_expr = unary_ident + operator + unary_ident
 
-	right_expr = func_call | compound_arith_expr | arith_expr | ident_swizzle
+	comparison = unary_ident + comparator + (unary_ident | const)
+	ternary_expr = LPAR + LPAR + comparison + RPAR + QUESTION + unary_ident + COLON + unary_ident + RPAR
+
+	func_call = Forward()
+	param = assignment_value | func_call | arith_expr | ident_swizzle | const
+	param_list = delimitedList(param)
+	func_name = "texture2D min dot mix clamp fract"
+	func_call << Group( oneOf(func_name) + LPAR + param_list + RPAR )
+	
+	compound_arith_expr = LPAR + arith_expr + RPAR + operator + unary_ident
+
+	right_expr = func_call | ternary_expr | compound_arith_expr | arith_expr | unary_ident
 
 	full_expr = Group(ident_swizzle + EQ + right_expr) + Suppress(SEMI)
 
