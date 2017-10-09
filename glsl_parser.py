@@ -2,85 +2,165 @@
 
 """A limited GLSL parser, specifically handles mojoshaders GLSL output"""
 
+import os
 import sys
+from collections import namedtuple
 from pyparsing import (
 	Suppress, Word, Literal, OneOrMore, ZeroOrMore, Optional, Combine, SkipTo, 
-	Group, delimitedList, oneOf, alphas, alphanums, nums, stringEnd, Forward
+	Group, delimitedList, oneOf, alphas, alphanums, nums, stringEnd, Forward,
+	ParseException
 )
 
-LBRACE, RBRACE, LBRACK, RBRACK, LPAR, RPAR, LESS, GREAT = map(Suppress, "{}[]()<>")
+LBRACE, RBRACE, LBRACK, RBRACK, LPAR, RPAR = map(Suppress, "{}[]()")
 PLUS, DASH, SLASH, ASTERIX, PERCENT, EQ, DOT = map(Literal, "+-/*%=.")
-CARET, BAR, AMPERSAND, TILDE, BANG, COLON, SEMI, COMMA, HASH, QUESTION = map(Suppress, "^|&~!:;,#?")
+COLON, SEMI, COMMA, HASH, QUESTION = map(Suppress, ":;,#?")
+CARET, BAR, AMPERSAND, TILDE, BANG = map(Suppress, "^|&~!")
+LESS, GREAT = map(Literal, "<>")
+
+
+Defines = namedtuple("Defines", "src dest")
+Function = namedtuple("Function", "name params")
+Unary = namedtuple("Unary", "name op")
 
 
 def parse(text):
 	"""Run the parser on the given text"""
 
-	float_const = Combine(Optional(DASH) + Word(nums) + DOT + Word(nums))
-	float_const.setParseAction(lambda tokens : float(tokens[0]))
+	# operators
+	operator = PLUS | DASH | ASTERIX | SLASH
+	comparator = Combine(EQ + EQ) | Combine(LESS + EQ) | (GREAT + EQ) | LESS | GREAT
 
-	int_const = Combine(Optional(DASH) + Word(nums)).setParseAction(lambda tokens : int(tokens[0]))
-	
-	const = float_const | int_const
-
-	ident = Word(alphas, alphanums + "_") # gl_* are reserved, but doesn't really matter
-
-	array_element = ident + LBRACK + Word(nums) + RBRACK
-
-	version = Suppress("#version") + Word(nums).setResultsName("version")
-
+	# keywords
 	type_qualifier = oneOf("const attribute varying uniform")
-	type_specifier = oneOf("void float int bool vec2 vec3 vec4 mat2 mat3 mat4 sampler2D")
+	type_specifier = oneOf("float int bool vec2 vec3 vec4 mat2 mat3 mat4 sampler2D")
 
-	declaration = Optional(type_qualifier) + type_specifier + (array_element | ident)
-	definition = Literal("#define") + ident + (array_element | ident)
+	functions = """radians degrees sin cos tan asin acos atan pow exp log exp2 
+	log2 sqrt inversesqrt abs sign floor ceil fract mod min max clamp mix step 
+	smoothstep length distance dot cross normalize ftransform faceforward 
+	reflect refract	matrixCompMult outerProduct transpose lessThan lessThanEqual 
+	greaterThan	greaterThanEqual equal notEqual any all not texture1D texture1DProj
+	texture1DLod texture1DProjLod texture2D texture2DProj texture2DLod 
+	texture2DProjLod texture3D texture3DProj texture3DLod texture3DProjLod
+	textureCube textureCubeLod shadow1D shadow1DProj shadow1DLod shadow1DProjLod
+	shadow2D shadow2DProj shadow2DLod shadow2DProjLod dFdx dFdy fwidth noise1
+	noise2 noise3 noise4
+	"""
+	builtin_functions = oneOf(functions + "vec2 vec3 vec4") # TODO deal vecX properly
+
+
+	# constants
+	float_const = Combine(Optional(DASH) + Word(nums) + DOT + Word(nums))
+	float_const.setParseAction(lambda t : float(t[0]))
+
+	int_const = Combine(Optional(DASH) + Word(nums))
+	int_const.setParseAction(lambda t : int(t[0]))
+
+	bool_const = Literal("true") | Literal("false")
+	bool_const.setParseAction(lambda t : t[0] == "true")
+
+	const = float_const | int_const | bool_const
+
+	# identifiers
+	array_index = LBRACK + Word(nums) + RBRACK
+	ident = Word(alphas, alphanums + "_")
+	identifier = Combine(ident + Optional(array_index))
+	# TODO deal with array indices
+
+	# declarations (constants, uniforms, #define etc. outside main)
+	declaration = Optional(type_qualifier) + type_specifier + identifier
+
+	definition = Suppress("#define") + identifier + identifier
+	definition.setParseAction(lambda t : Defines(t[1], t[0]))
 
 	assignment_value = type_specifier + LPAR + delimitedList(const) + RPAR
-	assignment_expr = declaration + EQ + assignment_value
-	expr = ((assignment_expr | declaration) + SEMI) | definition
+	assignment_expr = declaration + EQ + (assignment_value | const)
+	decl_expr = ((assignment_expr | declaration) + SEMI) | definition
 
+	# swizzle
 	swizzle = Suppress(DOT) + Word("xyzw", min=1, max=4)
-	ident_swizzle = ident + Optional(swizzle).setResultsName("swizzle")
+	ident_swizzle = identifier + Optional(swizzle)
 
-	operator = PLUS | DASH | ASTERIX
-	comparator = (EQ + EQ) | (LESS + EQ) | (GREAT + EQ) | LESS | GREAT
+	# rhs expressions
+	binary_operation = Forward()
+	function = Forward()
 	
-	unary_ident = Optional(DASH) + ident_swizzle
-	arith_expr = unary_ident + operator + unary_ident
+	unary_expr = DASH + ident_swizzle
+	unary_expr.setParseAction(lambda t : Unary(t[1], t[0]))	
 
-	comparison = unary_ident + comparator + (unary_ident | const)
-	ternary_expr = LPAR + LPAR + comparison + RPAR + QUESTION + unary_ident + COLON + unary_ident + RPAR
-
-	func_call = Forward()
-	param = assignment_value | func_call | arith_expr | ident_swizzle | const
-	param_list = delimitedList(param)
-	func_name = "texture2D min dot mix clamp fract"
-	func_call << Group( oneOf(func_name) + LPAR + param_list + RPAR )
+	operand = function | (LPAR + binary_operation + RPAR) | unary_expr | ident_swizzle | const
 	
-	compound_arith_expr = LPAR + arith_expr + RPAR + operator + unary_ident
+	function << (builtin_functions + LPAR + delimitedList(operand) + RPAR)	
+	binary_operation << (operand + (operator | comparator) + operand)
+	
+	function.setParseAction(lambda t : Function(t[0], t[1:]))
 
-	right_expr = func_call | ternary_expr | compound_arith_expr | arith_expr | unary_ident
+	comparison = operand + comparator + operand
+	
+	ternary_expr = LPAR + comparison + RPAR + QUESTION + operand + COLON + operand
 
-	full_expr = Group(ident_swizzle + EQ + right_expr) + Suppress(SEMI)
+	expr = ternary_expr | binary_operation | function | ident_swizzle
 
-	main_funciton = Literal("void") + Literal("main") + LPAR + RPAR + LBRACE + \
-		OneOrMore(full_expr).setResultsName("instructions")  + RBRACE
+	instruction = ident_swizzle + EQ + expr + SEMI
 
-	parser = version + ZeroOrMore(expr) + main_funciton + stringEnd
+
+	# main function
+	main_function = Suppress("void") + Suppress("main") + LPAR + RPAR + \
+		LBRACE + OneOrMore(instruction).setResultsName("instructions")  + RBRACE
+
+	# opengl version
+	version = Suppress("#version") + Word(nums).setResultsName("version")
+
+	# top-level rule
+	parser = version + ZeroOrMore(decl_expr) + main_function + stringEnd
 
 	return parser.parseString(text)
 
 
+def run_on_all(dir):
+	# recurse all subdirs find vert and frag, catch errors, print file path
+	total = 0
+	failed = 0
+
+	walk_dir = os.path.abspath(dir)
+
+	for root, subdirs, files in os.walk(walk_dir):
+		if "Standard" in root:
+			continue
+		for filename in files:
+			file_path = os.path.join(root, filename)
+			ext = filename[-4:]
+			if ext == "vert" or ext == "frag":
+				total += 1
+				with open(file_path) as f:
+					contents = f.read()	
+				try:
+					parse(contents)
+				except ParseException as pe:
+					failed += 1
+					print(f"\nFAILED: {file_path}")
+					print(f"\t{pe}\n")
+					print(pe.markInputline())
+	
+	print(f"{total} files | {failed} failed")
+
+
 def main():
-	if len(sys.argv) < 2:
-		print("usage: glsl_parser <file>")
+	if len(sys.argv) < 3:
+		print("usage: glsl_parser <-s|-r> <file>")
 		return
 
-	filepath = sys.argv[1]
-	with open(filepath) as f:
-		contents = f.read()	
+	filepath = sys.argv[2]
 
-	print(parse(contents))
+	if sys.argv[1] == "-r":
+		run_on_all(filepath)
+	elif sys.argv[1] == '-s':
+		with open(filepath) as f:
+			contents = f.read()	
+		try:
+			parse(contents)
+		except ParseException as pe:
+			print(pe)
+			print(pe.markInputline())
 
 
 if __name__ == "__main__":
