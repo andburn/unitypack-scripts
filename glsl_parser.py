@@ -32,7 +32,7 @@ def parse(text):
 
 	# keywords
 	type_qualifier = oneOf("const attribute varying uniform")
-	type_specifier = oneOf("float int bool vec2 vec3 vec4 mat2 mat3 mat4 sampler2D")
+	type_specifier = oneOf("float int bool vec2 vec3 vec4 mat2 mat3 mat4 sampler2D samplerCube")
 
 	functions = """radians degrees sin cos tan asin acos atan pow exp log exp2 
 	log2 sqrt inversesqrt abs sign floor ceil fract mod min max clamp mix step 
@@ -45,8 +45,8 @@ def parse(text):
 	shadow2D shadow2DProj shadow2DLod shadow2DProjLod dFdx dFdy fwidth noise1
 	noise2 noise3 noise4
 	"""
-	builtin_functions = oneOf(functions + "vec2 vec3 vec4") # TODO deal vecX properly
-
+	# TODO deal types properly
+	builtin_functions = oneOf(functions + "vec2 vec3 vec4 float")
 
 	# constants
 	float_const = Combine(Optional(DASH) + Word(nums) + DOT + Word(nums))
@@ -85,20 +85,20 @@ def parse(text):
 	function = Forward()
 	
 	unary_expr = DASH + ident_swizzle
-	unary_expr.setParseAction(lambda t : Unary(t[1], t[0]))	
+	unary_expr.setParseAction(lambda t : Unary(t[1], t[0]))
 
-	operand = function | (LPAR + binary_operation + RPAR) | unary_expr | ident_swizzle | const
-	
-	function << (builtin_functions + LPAR + delimitedList(operand) + RPAR)	
-	binary_operation << (operand + (operator | comparator) + operand)
+	operand = function | unary_expr | ident_swizzle | const
+	function_param = binary_operation | operand
+
+	function << (builtin_functions + LPAR + delimitedList(function_param) + RPAR)
+	binary_operation <<= (operand + (operator | comparator) + operand) | (LPAR + binary_operation + RPAR + (operator | comparator) + operand) | (LPAR + binary_operation + RPAR)
 	
 	function.setParseAction(lambda t : Function(t[0], t[1:]))
 
 	comparison = operand + comparator + operand
-	
-	ternary_expr = LPAR + comparison + RPAR + QUESTION + operand + COLON + operand
+	ternary_expr = LPAR + LPAR + comparison + RPAR + QUESTION + operand + COLON + operand + RPAR
 
-	expr = ternary_expr | binary_operation | function | ident_swizzle
+	expr = ternary_expr | binary_operation | function | unary_expr | ident_swizzle
 
 	instruction = ident_swizzle + EQ + expr + SEMI
 
@@ -124,7 +124,7 @@ def run_on_all(dir):
 	walk_dir = os.path.abspath(dir)
 
 	for root, subdirs, files in os.walk(walk_dir):
-		if "Standard" in root:
+		if "Standard" in root or "Pegasus" in root or "Legacy Shaders" in root:
 			continue
 		for filename in files:
 			file_path = os.path.join(root, filename)
