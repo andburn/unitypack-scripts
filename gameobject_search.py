@@ -84,12 +84,18 @@ def main():
 	global pt_quiet
 	# setup the command arguments
 	arg_parser = argparse.ArgumentParser()
-	arg_parser.add_argument("input")
-	arg_parser.add_argument("cache")
-	arg_parser.add_argument("search")
-	arg_parser.add_argument("--cache-only", action="store_true")
-	arg_parser.add_argument("--quiet", action="store_true")
-	arg_parser.add_argument("--show-errors", action="store_true")
+	arg_parser.add_argument("input",
+		help="the directory containing the unity3d files")
+	arg_parser.add_argument("cache",
+		help="the directory containing the cache files")
+	arg_parser.add_argument("search",
+		help="the search string, case insensitive")
+	arg_parser.add_argument("--cache-only", action="store_true",
+		help="only use cached files, do not try to build anything")
+	arg_parser.add_argument("--quiet", action="store_true",
+		help="hide informational output")
+	arg_parser.add_argument("--show-errors", action="store_true",
+		help="display any errors encountered reading an asset")
 	args = arg_parser.parse_args(sys.argv[1:])
 
 	pt_quiet = args.quiet
