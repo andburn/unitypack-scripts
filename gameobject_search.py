@@ -17,26 +17,25 @@ def get_bundle_cache(dir, name):
 	file_path = os.path.join(dir, "".join([name, ".pickle"]))
 	if os.path.isfile(file_path):
 		with open(file_path, "rb") as f:
-			print(f"cache loaded from: {file_path}")
+			pt(f"Cache file found for '{name}'")
 			return pickle.load(f)
 
 
 def save_bundle_cache(dir, name, data):
 	file_path = os.path.join(dir, "".join([name, ".pickle"]))
 	with open(file_path, "wb") as f:
-		print(f"cache saved as: {file_path}")
-		return pickle.dump(data, f)
+		pt(f"Cache file created for '{name}'")
+		pickle.dump(data, f)
 
 
-def build_cache(dir, bundle_name, asset, quiet):
-	print(f"Building cache: {bundle_name}")
+def build_dict(bundle_name, asset):
+	pt(f"Building dict for '{bundle_name}'")
 	gameobjects = {}
 	for id, obj in asset.objects.items():
 		try:
 			d = obj.read()
 		except Exception as e:
-			if not quiet:
-				print(f"[Read Error] {id} '{e}'")
+			err(f"{id} '{e}'")
 			continue
 
 		name = ""
@@ -52,59 +51,88 @@ def build_cache(dir, bundle_name, asset, quiet):
 			pass
 
 		if type == "GameObject" and name:
-			go = GameObject(id, name, bundle_name)
+			go = GameObject(id, name, bundle_name.split("/")[0])
 			if name in gameobjects:
-				gameobjects[name].append(go)
+				gameobjects[name.lower()].append(go)
 			else:
-				gameobjects[name] = [go]
-
-	if len(gameobjects) > 0:
-		save_bundle_cache(dir, bundle_name, gameobjects)
+				gameobjects[name.lower()] = [go]
 
 	return gameobjects
 
 
-def print_cache(cache):
-	# debug print cache
+pt_quiet=False
+
+def pt(message):
+	if not pt_quiet:
+		print(message)
+
+show_errors=False
+
+def err(message):
+	if show_errors:
+		print(f"[ERROR] {message}")
+
+
+def pt_cache(cache):
 	for k, v in cache.items():
-		print(k)
+		print(f"\"{k}\"")
 		for i in v:
 			print(f"\t{i.id}\t{i.name}")
 
 
 def main():
+	global pt_quiet
+	# setup the command arguments
 	arg_parser = argparse.ArgumentParser()
 	arg_parser.add_argument("input")
 	arg_parser.add_argument("cache")
 	arg_parser.add_argument("search")
+	arg_parser.add_argument("--cache-only", action="store_true")
 	arg_parser.add_argument("--quiet", action="store_true")
+	arg_parser.add_argument("--show-errors", action="store_true")
 	args = arg_parser.parse_args(sys.argv[1:])
 
-	# if os.path.isdir(args.input):
-	#     files = glob.glob(args.input + "/*.unity3d")
-	files = [args.input]
+	pt_quiet = args.quiet
+	show_errors = args.show_errors
 
-	print(f"Reading {len(files)} files in {args.input}")
+	if os.path.isdir(args.input):
+	    files = glob.glob(args.input + "/*.unity3d")
+
+	results = []
+	search_term = args.search.lower()
 
 	for file in files:
-		with open(file, "rb") as f:
-			bundle = unitypack.load(f)
-			file_name = filename_no_ext(file)
+		file_name = filename_no_ext(file)
+		# try and get the file from the cache
+		cache = get_bundle_cache(args.cache, file_name)
+		# if its not cached, created it or skip it
+		if not cache:
+			if args.cache_only:
+				# if only interested in cached files, try the next file
+				continue
+			go_dict = {}
+			with open(file, "rb") as f:
+				bundle = unitypack.load(f)
+			for asset in bundle.assets:
+				asset_bundle_name = f"{file_name}/{asset.name}"
+				# build the game object dict
+				go_dict.update(build_dict(asset_bundle_name, asset))
+			# skip this file if dict is empty
+			if len(go_dict) <= 0:
+				continue
+			# save dict as file cache
+			cache = go_dict
+			save_bundle_cache(args.cache, file_name, cache)
+		# search this file
+		for name in cache.keys():
+			if search_term in name:
+				results.extend(cache[name])
 
-		for asset in bundle.assets:
-			asset_bundle_name = f"{file_name}_{asset.name}"
-			print(asset_bundle_name)
-
-			cache = get_bundle_cache(args.cache, asset_bundle_name)
-
-			if not cache:
-				cache = build_cache(args.cache, asset_bundle_name, asset, args.quiet)
-
-			# look for exact search term as key
-			if args.search in cache:
-				print(cache[args.search])
-			else:
-				print(f"No Results for '{args.search}'")
+	if (len(results) > 0):
+		for r in results:
+			print(f"{r.id:22} {r.bundle:<16}{r.name}")
+	else:
+		print(f"No Results for '{search_term}'")
 
 
 if __name__ == "__main__":
