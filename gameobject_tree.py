@@ -4,6 +4,7 @@ from collections import namedtuple
 
 import unitypack
 import argparse
+from treelib import Node, Tree
 
 
 GameObject = namedtuple("GameObject", "id name bundle")
@@ -42,6 +43,13 @@ def get_root_object(game_object):
 	return transform.game_object.resolve()
 
 
+def traverse(transform, tree, parent):
+	name = transform.game_object.resolve().name
+	new_parent = tree.create_node(name, parent=parent)
+	for c in transform.children:
+		traverse(c.resolve(), tree, new_parent)
+
+
 # 7714193434438982024 shared7 > none
 # 8149677989356223801 spells3 > parent
 # shared5 -7771824907442899968
@@ -66,6 +74,9 @@ def main():
 			break
 
 		root_object = get_root_object(game_object)
+		tree = Tree()
+		traverse(get_transform(root_object), tree, None)
+		tree.show()
 
 
 if __name__ == "__main__":
