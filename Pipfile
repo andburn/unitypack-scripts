@@ -1,17 +1,12 @@
 [[source]]
-
 url = "https://pypi.python.org/simple"
 verify_ssl = true
 name = "pypi"
 
-
 [packages]
-
 unitypack = "*"
 mojoparser = {git = "https://github.com/andburn/python-mojoparser.git"}
-pyyaml = "*"
+PyYAML = "*"
 pyparsing = "*"
 
-
 [dev-packages]
-

@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 
 import unitypack
 import argparse
@@ -45,6 +46,13 @@ class Transform:
 		self.rotation = vec_from_dict(obj.rotation)
 		self.scale = vec_from_dict(obj.scale)
 
+	def to_json(self):
+		return {
+			"position": self.position,
+			"rotation": self.rotation,
+			"scale": self.scale
+		}
+
 
 class Texture:
 	def __init__(self, name, obj):
@@ -56,6 +64,12 @@ class Texture:
 	def __str__(self):
 		return f"{self.name} {self.scale} {self.offset}"
 
+	def to_json(self):
+		return {
+			"name": self.name,
+			"scale": self.scale,
+			"offset": self.offset
+		}
 
 
 class Material:
@@ -77,9 +91,17 @@ class Material:
 		for k, v in obj.saved_properties["m_Floats"].items():
 			self.uniforms[k] = float(v)
 
-
 	def __str__(self):
 		return f"<Material> ({self.name}, {self.shader})"
+
+	def to_json(self):
+		return {
+			"name": self.name,
+			"textures": self.textures,
+			"uniforms": self.uniforms,
+			"shader": self.shader,
+			"keywords": self.shader_keywords
+		}
 
 
 class Mesh:
@@ -91,6 +113,9 @@ class Mesh:
 	def __str__(self):
 		return f"<Mesh> {self.name}"
 
+	def to_json(self):
+		return { "name": self.name }
+
 
 class GameObject(Node):
 	def __init__(self, game_object, transform):
@@ -99,6 +124,7 @@ class GameObject(Node):
 		self.mesh = None
 		self.materials = []
 		self.scripts = []
+		self.children = []
 		self.__load_components(game_object.component)
 
 	def __load_components(self, components):
@@ -125,6 +151,24 @@ class GameObject(Node):
 				else:
 					qprint("Component error")
 
+	def to_json(self):
+		return {
+            "name": self.name,
+            "transform": self.transform,
+            "mesh": self.mesh,
+			"materials": self.materials,
+			"scripts": self.scripts,
+            "children": self.children
+        }
+
+
+class GameObjectEncoder(json.JSONEncoder):
+	def default(self, obj):
+		if hasattr(obj, "to_json"):
+			return obj.to_json()
+		else:
+			print("%r does not implement to_json()" % (obj))
+			return json.JSONEncoder.default(self, obj)
 
 
 def get_by_id(sid, asset):
@@ -180,8 +224,8 @@ def main():
 		help="the directory containing the unity3d files")
 	arg_parser.add_argument("bundle",
 		help="the unity3d file containing the asset")
-	arg_parser.add_argument("id",
-		help="the id of the base asset")
+	arg_parser.add_argument("id", help="the id of the base asset")
+	arg_parser.add_argument("output", help="the output directory")
 	arg_parser.add_argument("--quiet", action="store_true")
 	args = arg_parser.parse_args(sys.argv[1:])
 
@@ -204,7 +248,12 @@ def main():
 
 		tree = Tree()
 		traverse_transforms(root_transform, tree)
-		tree.print()
+
+		json_str = json.dumps(tree.root,
+			cls=GameObjectEncoder, sort_keys=True, indent=4)
+		json_path = os.path.join(args.output, tree.root.name + ".json")
+		with open(json_path, "w") as f:
+			f.write(json_str)
 
 
 if __name__ == "__main__":
