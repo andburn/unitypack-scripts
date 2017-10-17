@@ -3,17 +3,11 @@ import sys
 import json
 
 import unitypack
+from unitypack.environment import UnityEnvironment
 import argparse
 
 from utils import vec_from_dict
-
-
-quiet_print = False
-
-def qprint(string):
-	global quiet_print
-	if not quiet_print:
-		print(string)
+from shaders import extract_shader, redefine_shader
 
 
 class Tree:
@@ -58,15 +52,15 @@ class Texture:
 	def __init__(self, name, obj):
 		self.name = name
 		self.pointer = obj["m_Texture"]
+		self.object = self.pointer.resolve()
 		self.scale = vec_from_dict(obj["m_Scale"])
 		self.offset = vec_from_dict(obj["m_Offset"])
-
-	def __str__(self):
-		return f"{self.name} {self.scale} {self.offset}"
+		self.file = self.object.name
 
 	def to_json(self):
 		return {
 			"name": self.name,
+			"file": self.file,
 			"scale": self.scale,
 			"offset": self.offset
 		}
@@ -90,6 +84,7 @@ class Material:
 			self.uniforms[k] = vec_from_dict(v)
 		for k, v in obj.saved_properties["m_Floats"].items():
 			self.uniforms[k] = float(v)
+		self.shader = self.object.shader.resolve()
 
 	def __str__(self):
 		return f"<Material> ({self.name}, {self.shader})"
@@ -97,10 +92,10 @@ class Material:
 	def to_json(self):
 		return {
 			"name": self.name,
+			"shader": self.shader.parsed_form.name,
+			"keywords": self.shader_keywords,
 			"textures": self.textures,
-			"uniforms": self.uniforms,
-			"shader": self.shader,
-			"keywords": self.shader_keywords
+			"uniforms": self.uniforms
 		}
 
 
@@ -110,11 +105,8 @@ class Mesh:
 		self.object = pointer.resolve()
 		self.name = self.object.name
 
-	def __str__(self):
-		return f"<Mesh> {self.name}"
-
 	def to_json(self):
-		return { "name": self.name }
+		return self.name
 
 
 class GameObject(Node):
@@ -167,22 +159,20 @@ class GameObjectEncoder(json.JSONEncoder):
 		if hasattr(obj, "to_json"):
 			return obj.to_json()
 		else:
-			print("%r does not implement to_json()" % (obj))
+			qprint(f"{obj} does not implement to_json()")
 			return json.JSONEncoder.default(self, obj)
 
 
 def get_by_id(sid, asset):
-	print(f"Loading {asset.name}")
+	qprint(f"Loading {asset.name}")
 	for id, obj in asset.objects.items():
 		if sid != id:
 			continue
-
 		try:
 			d = obj.read()
 		except Exception as e:
 			print(f"ERROR {e}")
 			continue
-
 		return d
 
 
@@ -218,10 +208,17 @@ def traverse_transforms(transform, tree, parent=None):
 		traverse_transforms(child.resolve(), tree, new_node)
 
 
+quiet_print = False
+
+def qprint(string):
+	global quiet_print
+	if not quiet_print:
+		print(string)
+
+
 def main():
 	arg_parser = argparse.ArgumentParser()
-	arg_parser.add_argument("dir",
-		help="the directory containing the unity3d files")
+	arg_parser.add_argument("files", nargs="+", help="the unity3d files")
 	arg_parser.add_argument("bundle",
 		help="the unity3d file containing the asset")
 	arg_parser.add_argument("id", help="the id of the base asset")
@@ -234,26 +231,33 @@ def main():
 
 	base_id = int(args.id)
 
-	with open(os.path.join(args.dir, args.bundle + ".unity3d"), "rb") as f:
-		bundle = unitypack.load(f)
-	for asset in bundle.assets:
-		print(asset.asset_refs)
-		game_object = get_by_id(base_id, asset)
-		if not game_object:
-			print(f"{base_id} not found in {asset.name}")
-			break
+	redefine_shader()
+	env = UnityEnvironment()
 
-		root_object = get_root_object(game_object)
-		root_transform = get_transform(root_object)
+	for file in args.files:
+		qprint(f"Reading {file}")
+		f = open(file, "rb")
+		env.load(f)
 
-		tree = Tree()
-		traverse_transforms(root_transform, tree)
+	for bundle in env.bundles.values():
+		for asset in bundle.assets:
+			qprint(f"Parsing {asset.name}")
+			game_object = get_by_id(base_id, asset)
+			if not game_object:
+				qprint(f"{base_id} not found in {asset.name}")
+				break
 
-		json_str = json.dumps(tree.root,
-			cls=GameObjectEncoder, sort_keys=True, indent=4)
-		json_path = os.path.join(args.output, tree.root.name + ".json")
-		with open(json_path, "w") as f:
-			f.write(json_str)
+			root_object = get_root_object(game_object)
+			root_transform = get_transform(root_object)
+
+			tree = Tree()
+			traverse_transforms(root_transform, tree)
+
+			json_str = json.dumps(tree.root,
+				cls=GameObjectEncoder, sort_keys=False, indent=4)
+			json_path = os.path.join(args.output, tree.root.name + ".json")
+			with open(json_path, "w") as f:
+				f.write(json_str)
 
 
 if __name__ == "__main__":
