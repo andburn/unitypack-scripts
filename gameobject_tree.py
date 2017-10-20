@@ -1,13 +1,15 @@
+import argparse
+import json
 import os
 import sys
-import json
+from io import BytesIO
 
 import unitypack
+from PIL import ImageOps
 from unitypack.environment import UnityEnvironment
-import argparse
 
-from utils import vec_from_dict
 from shaders import extract_shader, redefine_shader
+from utils import vec_from_dict, write_to_file
 
 
 class Tree:
@@ -208,6 +210,47 @@ def traverse_transforms(transform, tree, parent=None):
 		traverse_transforms(child.resolve(), tree, new_node)
 
 
+def extract_texture(texture, out_dir, flip=True):
+	filename = texture.name + ".png"
+	try:
+		image = texture.image
+	except NotImplementedError:
+		print("WARNING: Texture format not implemented. Skipping %r." % (filename))
+		return
+
+	if image is None:
+		print("WARNING: %s is an empty image" % (filename))
+		return
+
+	print("Decoding %r" % (texture))
+	# Texture2D objects are flipped
+	if flip:
+		img = ImageOps.flip(image)
+	# PIL has no method to write to a string :/
+	output = BytesIO()
+	img.save(output, format="png")
+	write_to_file(
+		os.path.join(out_dir, filename),
+		output.getvalue(), mode="wb", info=True)
+
+
+def extract_assets(game_object, out_dir):
+	from unitypack.export import OBJMesh
+
+	if game_object.mesh:
+		write_to_file(
+			os.path.join(out_dir, game_object.mesh.name + ".obj"),
+			OBJMesh(game_object.mesh.object).export(), info=True)
+	for material in game_object.materials:
+		if material.shader:
+			extract_shader(material.shader, out_dir)
+		for texture in material.textures.values():
+			extract_texture(texture.object, out_dir)
+
+	for child in game_object.children:
+		extract_assets(child, out_dir)
+
+
 quiet_print = False
 
 def qprint(string):
@@ -253,11 +296,17 @@ def main():
 			tree = Tree()
 			traverse_transforms(root_transform, tree)
 
-			json_str = json.dumps(tree.root,
-				cls=GameObjectEncoder, sort_keys=False, indent=4)
-			json_path = os.path.join(args.output, tree.root.name + ".json")
-			with open(json_path, "w") as f:
-				f.write(json_str)
+			# create output directory
+			out_dir = os.path.join(args.output, tree.root.name)
+			if not os.path.exists(out_dir):
+				os.mkdir(out_dir)
+			# export the tree as json
+			json_str = json.dumps(tree.root, cls=GameObjectEncoder, indent=4)
+			# with open(os.path.join(out_dir, "data.json"), "w") as f:
+			# 	f.write(json_str)
+			write_to_file(os.path.join(out_dir, "data.json"), json_str, info=True)
+			# extract referenced textures, models and shaders
+			extract_assets(tree.root, out_dir)
 
 
 if __name__ == "__main__":
