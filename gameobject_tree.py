@@ -54,9 +54,12 @@ class Texture:
 	def __init__(self, name, obj):
 		self.name = name
 		self.pointer = obj["m_Texture"]
-		self.object = self.pointer.resolve()
 		self.scale = vec_from_dict(obj["m_Scale"])
 		self.offset = vec_from_dict(obj["m_Offset"])
+		self.__load_props(obj)
+
+	def __load_props(self, obj):
+		self.object = self.pointer.resolve()
 		self.file = self.object.name
 
 	def to_json(self):
@@ -87,9 +90,6 @@ class Material:
 		for k, v in obj.saved_properties["m_Floats"].items():
 			self.uniforms[k] = float(v)
 		self.shader = self.object.shader.resolve()
-
-	def __str__(self):
-		return f"<Material> ({self.name}, {self.shader})"
 
 	def to_json(self):
 		return {
@@ -215,14 +215,14 @@ def extract_texture(texture, out_dir, flip=True):
 	try:
 		image = texture.image
 	except NotImplementedError:
-		print("WARNING: Texture format not implemented. Skipping %r." % (filename))
+		qprint(f"WARNING: Texture format not implemented. Skipping {filename}.")
 		return
 
 	if image is None:
-		print("WARNING: %s is an empty image" % (filename))
+		qprint("WARNING: {filename} is an empty image")
 		return
 
-	print("Decoding %r" % (texture))
+	qprint("Decoding {texture.name}")
 	# Texture2D objects are flipped
 	if flip:
 		img = ImageOps.flip(image)
@@ -231,7 +231,10 @@ def extract_texture(texture, out_dir, flip=True):
 	img.save(output, format="png")
 	write_to_file(
 		os.path.join(out_dir, filename),
-		output.getvalue(), mode="wb", info=True)
+		output.getvalue(),
+		mode="wb",
+		info=True
+	)
 
 
 def extract_assets(game_object, out_dir):
@@ -240,7 +243,9 @@ def extract_assets(game_object, out_dir):
 	if game_object.mesh:
 		write_to_file(
 			os.path.join(out_dir, game_object.mesh.name + ".obj"),
-			OBJMesh(game_object.mesh.object).export(), info=True)
+			OBJMesh(game_object.mesh.object).export(),
+			info=True
+		)
 	for material in game_object.materials:
 		if material.shader:
 			extract_shader(material.shader, out_dir)
@@ -262,8 +267,6 @@ def qprint(string):
 def main():
 	arg_parser = argparse.ArgumentParser()
 	arg_parser.add_argument("files", nargs="+", help="the unity3d files")
-	arg_parser.add_argument("bundle",
-		help="the unity3d file containing the asset")
 	arg_parser.add_argument("id", help="the id of the base asset")
 	arg_parser.add_argument("output", help="the output directory")
 	arg_parser.add_argument("--quiet", action="store_true")
@@ -302,9 +305,7 @@ def main():
 				os.mkdir(out_dir)
 			# export the tree as json
 			json_str = json.dumps(tree.root, cls=GameObjectEncoder, indent=4)
-			# with open(os.path.join(out_dir, "data.json"), "w") as f:
-			# 	f.write(json_str)
-			write_to_file(os.path.join(out_dir, "data.json"), json_str, info=True)
+			write_to_file(os.path.join(out_dir, "data.json"), json_str, info=quiet_print)
 			# extract referenced textures, models and shaders
 			extract_assets(tree.root, out_dir)
 
