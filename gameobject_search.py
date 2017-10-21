@@ -103,6 +103,8 @@ def main():
 
 	if os.path.isdir(args.input):
 	    files = glob.glob(args.input + "/*.unity3d")
+	else:
+		files = [args.input]
 
 	results = []
 	search_term = args.search.lower()
