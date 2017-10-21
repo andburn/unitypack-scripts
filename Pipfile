@@ -5,8 +5,8 @@ name = "pypi"
 
 [packages]
 unitypack = "*"
-mojoparser = {git = "https://github.com/andburn/python-mojoparser.git"}
 PyYAML = "*"
 pyparsing = "*"
+mojoparser = {git = "https://github.com/andburn/python-mojoparser.git", editable = true}
 
 [dev-packages]

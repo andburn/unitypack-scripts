@@ -7,7 +7,10 @@ from collections import namedtuple
 import unitypack
 import argparse
 
-from utils import filename_no_ext
+from utils import filename_no_ext, Echo
+
+
+(debug, info, error) = Echo.echo()
 
 
 GameObject = namedtuple("GameObject", "id name bundle")
@@ -17,25 +20,25 @@ def get_bundle_cache(dir, name):
 	file_path = os.path.join(dir, "".join([name, ".pickle"]))
 	if os.path.isfile(file_path):
 		with open(file_path, "rb") as f:
-			pt(f"Cache file found for '{name}'")
+			info(f"Cache file found for '{name}'")
 			return pickle.load(f)
 
 
 def save_bundle_cache(dir, name, data):
 	file_path = os.path.join(dir, "".join([name, ".pickle"]))
 	with open(file_path, "wb") as f:
-		pt(f"Cache file created for '{name}'")
+		info(f"Cache file created for '{name}'")
 		pickle.dump(data, f)
 
 
 def build_dict(bundle_name, asset):
-	pt(f"Building dict for '{bundle_name}'")
+	info(f"Building dict for '{bundle_name}'")
 	gameobjects = {}
 	for id, obj in asset.objects.items():
 		try:
 			d = obj.read()
 		except Exception as e:
-			err(f"{id} '{e}'")
+			error(f"{id} '{e}'")
 			continue
 
 		name = ""
@@ -60,28 +63,7 @@ def build_dict(bundle_name, asset):
 	return gameobjects
 
 
-pt_quiet=False
-
-def pt(message):
-	if not pt_quiet:
-		print(message)
-
-show_errors=False
-
-def err(message):
-	if show_errors:
-		print(f"[ERROR] {message}")
-
-
-def pt_cache(cache):
-	for k, v in cache.items():
-		print(f"\"{k}\"")
-		for i in v:
-			print(f"\t{i.id}\t{i.name}")
-
-
 def main():
-	global pt_quiet
 	# setup the command arguments
 	arg_parser = argparse.ArgumentParser()
 	arg_parser.add_argument("input",
@@ -92,14 +74,15 @@ def main():
 		help="the search string, case insensitive")
 	arg_parser.add_argument("--cache-only", action="store_true",
 		help="only use cached files, do not try to build anything")
-	arg_parser.add_argument("--quiet", action="store_true",
-		help="hide informational output")
-	arg_parser.add_argument("--show-errors", action="store_true",
+	arg_parser.add_argument("-q", action="store_true")
+	arg_parser.add_argument("-qq", action="store_true")
+	arg_parser.add_argument("--hide-errors", action="store_true",
 		help="display any errors encountered reading an asset")
 	args = arg_parser.parse_args(sys.argv[1:])
 
-	pt_quiet = args.quiet
-	show_errors = args.show_errors
+	Echo.quiet = args.q
+	Echo.very_quiet = args.qq
+	Echo.hide_errors = args.hide_errors
 
 	if os.path.isdir(args.input):
 	    files = glob.glob(args.input + "/*.unity3d")

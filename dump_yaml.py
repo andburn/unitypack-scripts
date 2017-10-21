@@ -20,6 +20,8 @@ from utils import *
 FILE_EXT = ".unity3d"
 EXCLUDES = ["sounds0", "dbf", "fonts0", "fontsjajp0", "fontsruru0"]
 
+(debug, info, error) = utils.Echo.echo()
+
 
 def unityobj_representer(dumper, data):
 	return dumper.represent_mapping("!unitypack:%s" % (data.__class__.__name__), data._obj)
@@ -83,7 +85,7 @@ def mapping_constructor(loader, node):
 
 def main():
 	if len(sys.argv) != 3:
-		print("Usage: extract_yaml.py <dir_in> <dir_out>")
+		error("Usage: extract_yaml.py <dir_in> <dir_out>")
 		sys.exit(2)
 
 	dir_in = sys.argv[1]
@@ -121,11 +123,11 @@ def main():
 	for f in files:
 		bundle_name = filename_no_ext(f)
 		if bundle_name in EXCLUDES:
-			print("Skipping %s" % (bundle_name))
+			info(f"Skipping {bundle_name}")
 			continue
 		else:
 			out_path = os.path.join(dir_out, bundle_name)
-			print("Extracting %s" % (bundle_name))
+			info(f"Extracting {bundle_name}")
 
 		with open(f, "rb") as fin:
 			bundle = unitypack.load(fin)
@@ -138,7 +140,7 @@ def main():
 					make_dirs(file_out)
 					write_to_file(file_out, serialize(d), warn=False)
 				except Exception as e:
-					print("[Error] %s" % (e))
+					error(f"Error: {e}")
 
 
 if __name__ == "__main__":

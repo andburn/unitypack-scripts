@@ -9,7 +9,10 @@ from PIL import ImageOps
 from unitypack.environment import UnityEnvironment
 
 from shaders import extract_shader, redefine_shader
-from utils import vec_from_dict, write_to_file
+from utils import vec_from_dict, write_to_file, Echo
+
+
+(debug, info, error) = Echo.echo()
 
 
 class Tree:
@@ -137,13 +140,13 @@ class GameObject(Node):
 					# Transform (skip, added separately)
 					continue
 				else:
-					qprint("Unknown component")
+					debug("Unknown component")
 			except AttributeError:
 				if "m_Script" in comp:
 					self.scripts.append(
 						comp["m_Script"].resolve()["m_ClassName"])
 				else:
-					qprint("Component error")
+					error("Component error")
 
 	def to_json(self):
 		return {
@@ -161,19 +164,19 @@ class GameObjectEncoder(json.JSONEncoder):
 		if hasattr(obj, "to_json"):
 			return obj.to_json()
 		else:
-			qprint(f"{obj} does not implement to_json()")
+			info(f"{obj} does not implement to_json()")
 			return json.JSONEncoder.default(self, obj)
 
 
 def get_by_id(sid, asset):
-	qprint(f"Loading {asset.name}")
+	info(f"Loading {asset.name}")
 	for id, obj in asset.objects.items():
 		if sid != id:
 			continue
 		try:
 			d = obj.read()
 		except Exception as e:
-			print(f"ERROR {e}")
+			error(f"ERROR {e}")
 			continue
 		return d
 
@@ -215,14 +218,14 @@ def extract_texture(texture, out_dir, flip=True):
 	try:
 		image = texture.image
 	except NotImplementedError:
-		qprint(f"WARNING: Texture format not implemented. Skipping {filename}.")
+		error(f"WARNING: Texture format not implemented. Skipping {filename}.")
 		return
 
 	if image is None:
-		qprint("WARNING: {filename} is an empty image")
+		error("WARNING: {filename} is an empty image")
 		return
 
-	qprint("Decoding {texture.name}")
+	info("Decoding {texture.name}")
 	# Texture2D objects are flipped
 	if flip:
 		img = ImageOps.flip(image)
@@ -232,8 +235,7 @@ def extract_texture(texture, out_dir, flip=True):
 	write_to_file(
 		os.path.join(out_dir, filename),
 		output.getvalue(),
-		mode="wb",
-		info=True
+		mode="wb"
 	)
 
 
@@ -243,8 +245,7 @@ def extract_assets(game_object, out_dir):
 	if game_object.mesh:
 		write_to_file(
 			os.path.join(out_dir, game_object.mesh.name + ".obj"),
-			OBJMesh(game_object.mesh.object).export(),
-			info=True
+			OBJMesh(game_object.mesh.object).export()
 		)
 	for material in game_object.materials:
 		if material.shader:
@@ -256,24 +257,17 @@ def extract_assets(game_object, out_dir):
 		extract_assets(child, out_dir)
 
 
-quiet_print = False
-
-def qprint(string):
-	global quiet_print
-	if not quiet_print:
-		print(string)
-
-
 def main():
 	arg_parser = argparse.ArgumentParser()
 	arg_parser.add_argument("files", nargs="+", help="the unity3d files")
 	arg_parser.add_argument("id", help="the id of the base asset")
 	arg_parser.add_argument("output", help="the output directory")
-	arg_parser.add_argument("--quiet", action="store_true")
+	arg_parser.add_argument("-q", action="store_true")
+	arg_parser.add_argument("-qq", action="store_true")
 	args = arg_parser.parse_args(sys.argv[1:])
 
-	global quiet_print
-	quiet_print = args.quiet
+	Echo.quiet = args.q
+	Echo.very_quiet = args.qq
 
 	base_id = int(args.id)
 
@@ -281,16 +275,16 @@ def main():
 	env = UnityEnvironment()
 
 	for file in args.files:
-		qprint(f"Reading {file}")
+		info(f"Reading {file}")
 		f = open(file, "rb")
 		env.load(f)
 
 	for bundle in env.bundles.values():
 		for asset in bundle.assets:
-			qprint(f"Parsing {asset.name}")
+			info(f"Parsing {asset.name}")
 			game_object = get_by_id(base_id, asset)
 			if not game_object:
-				qprint(f"{base_id} not found in {asset.name}")
+				info(f"{base_id} not found in {asset.name}")
 				break
 
 			root_object = get_root_object(game_object)
@@ -305,7 +299,7 @@ def main():
 				os.mkdir(out_dir)
 			# export the tree as json
 			json_str = json.dumps(tree.root, cls=GameObjectEncoder, indent=4)
-			write_to_file(os.path.join(out_dir, "data.json"), json_str, info=quiet_print)
+			write_to_file(os.path.join(out_dir, "data.json"), json_str)
 			# extract referenced textures, models and shaders
 			extract_assets(tree.root, out_dir)
 

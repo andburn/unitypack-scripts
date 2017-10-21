@@ -9,6 +9,9 @@ import mojoparser
 import utils
 
 
+(debug, info, error) = utils.Echo.echo()
+
+
 class Program(Enum):
 	FRAGMENT = auto()
 	VERTEX = auto()
@@ -79,9 +82,9 @@ def shader_has_compatible_props(obj):
 		return False
 
 
-def extract_shader(shader, dir, debug=False):
+def extract_shader(shader, dir, raw=False):
 	if not shader_has_compatible_props(shader):
-		print("The shader asset has an unsupported format")
+		error("The shader asset has an unsupported format")
 		return
 
 	# create output path for each shader
@@ -89,14 +92,14 @@ def extract_shader(shader, dir, debug=False):
 	path = os.path.normpath(os.path.join(dir, shader.parsed_form.name))
 	os.makedirs(path, exist_ok=True)
 
-	print(f"Extracting '{shader.parsed_form.name}'")
+	info(f"Extracting '{shader.parsed_form.name}'")
 	compressed = unitypack.utils.BinaryReader(BytesIO(shader.blob))
 	# check blob sizes and offsets match up
 	assert compressed.buf.getbuffer().nbytes == sum(shader.compressed_sizes)
 	assert len(shader.compressed_sizes) == len(shader.decompressed_sizes)
 	assert len(shader.compressed_sizes) == len(shader.compressed_offsets)
 
-	# crate shader bytecode parser object
+	# create shader bytecode parser object
 	bytecode_parser = mojoparser.Parser()
 	# decompress each shader format and extract the subprograms
 	for i, s in enumerate(shader.compressed_sizes):
@@ -125,7 +128,7 @@ def extract_shader(shader, dir, debug=False):
 			if stype_id in shader_type_map:
 				stype = shader_type_map[stype_id]
 			if stype == None:
-				print(f"Skipping unsupported type ({stype}) @ {offset}")
+				info(f"Skipping unsupported type ({stype}) @ {offset}")
 				continue
 			# XXX unknown series of bytes (12)
 			u1, u2, u3 = (b.read_int(), b.read_int(), b.read_int())
@@ -139,7 +142,7 @@ def extract_shader(shader, dir, debug=False):
 				size = b.read_int()
 				keywords.append(b.read_string(size))
 				b.align()
-			print(f"subprogram ({stype}) @ {offset} [{' '.join(keywords)}]")
+			debug(f"subprogram ({stype}) @ {offset} [{' '.join(keywords)}]")
 			# read the bytecode data
 			raw_data = b.read(b.read_int())
 
@@ -148,12 +151,14 @@ def extract_shader(shader, dir, debug=False):
 			#	format. Don't think its necesssary as the bytecode has an
 			#	embeded constant table 'CTAB'
 
+			# TODO match up verts and frags, and name better
 			# disassemble DX9 bytecode
 			if stype.api == API.D3D9:
 				try:
 					parsed_data = bytecode_parser.parse(raw_data, mojoparser.Profile.GLSL110)
 				except mojoparser.ParseFailureError as err:
-					print(f"WARNING: {err}")
+					error(f"'{name}': {err}")
+					debug("\n".join(err.errors))
 					continue
 			# set the filename
 			filename = os.path.join(path, f"{name}.{stype.api}.{offset}")
@@ -165,6 +170,6 @@ def extract_shader(shader, dir, debug=False):
 			if keywords:
 				utils.write_to_file(filename + ".tags", "\n".join(keywords))
 			# write full subshader blob
-			if debug:
+			if raw:
 				utils.write_to_file(filename + ".bin", sub_bytes, "wb")
 				utils.write_to_file(filename + ".co", raw_data, "wb")

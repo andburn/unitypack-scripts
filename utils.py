@@ -1,14 +1,38 @@
 import os
 
 
-def write_to_file(path, contents, mode="w", info=False, warn=True):
-	if os.path.isfile(path) and warn:
-		print("WARNING: %s exists and will be overwritten" % (path))
+class Echo:
+	quiet = False
+	very_quiet = False
+	hide_errors = False
+
+	@classmethod
+	def echo(cls):
+		return (cls.debug, cls.info, cls.error)
+
+	@classmethod
+	def debug(cls, message):
+		if not cls.quiet and not cls.very_quiet:
+			print(message)
+
+	@classmethod
+	def info(cls, message):
+		if not cls.very_quiet:
+			print(message)
+
+	@classmethod
+	def error(cls, message):
+		if not cls.hide_errors:
+			print(message)
+
+
+def write_to_file(path, contents, mode="w"):
+	if os.path.isfile(path):
+		Echo.info("WARNING: %s exists and will be overwritten" % (path))
 	encoding = None if "b" in mode else "utf-8"
 	with open(path, mode, encoding=encoding) as f:
 		written = f.write(contents)
-	if info:
-		print("Written %i bytes to %r" % (written, path))
+	Echo.debug("Written %i bytes to %r" % (written, path))
 
 
 def filename_no_ext(path):

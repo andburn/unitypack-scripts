@@ -17,12 +17,15 @@ from meshes import JSONMesh, BabylonMesh
 EXCLUDES = ["sounds0"]
 
 
-def handle_asset(asset, handle_formats, dir, flip, objMesh, quiet):
+(debug, info, error) = utils.Echo.echo()
+
+
+def handle_asset(asset, handle_formats, dir, flip, objMesh):
 	for id, obj in asset.objects.items():
 		try:
 			otype = obj.type
 		except Exception as e:
-			print("[Error] %s" % (e))
+			error("[Error] %s" % (e))
 			continue
 
 		if otype not in handle_formats:
@@ -43,7 +46,7 @@ def handle_asset(asset, handle_formats, dir, flip, objMesh, quiet):
 				mesh_data = OBJMesh(d).export()
 				utils.write_to_file(save_path + ".obj", mesh_data, mode="w")
 			except (NotImplementedError, RuntimeError) as e:
-				print("WARNING: Could not extract %r (%s)" % (d, e))
+				error("WARNING: Could not extract %r (%s)" % (d, e))
 				mesh_data = pickle.dumps(d._obj)
 				utils.write_to_file(save_path + ".Mesh.pickle", mesh_data, mode="wb")
 
@@ -58,17 +61,16 @@ def handle_asset(asset, handle_formats, dir, flip, objMesh, quiet):
 			try:
 				image = d.image
 				if image is None:
-					print("WARNING: %s is an empty image" % (filename))
+					info("WARNING: %s is an empty image" % (filename))
 					utils.write_to_file(save_path + ".empty", "")
 				else:
-					if not quiet:
-						print("Decoding %r" % (d))
+					info("Decoding %r" % (d))
 					img = image
 					if flip:
 						img = ImageOps.flip(image)
 					img.save(save_path + ".png")
 			except Exception as e:
-				print("Failed to extract texture %s (%s)" % (d.name, e))
+				error("Failed to extract texture %s (%s)" % (d.name, e))
 
 
 
@@ -80,12 +82,16 @@ def main():
 	p.add_argument("--images", action="store_true")
 	p.add_argument("--models", action="store_true")
 	p.add_argument("--text", action="store_true")
-	p.add_argument("--quiet", action="store_true")
+	p.add_argument("-q", action="store_true")
+	p.add_argument("-qq", action="store_true")
 	# flip images the "right" way up
 	p.add_argument("--flip", action="store_true")
 	# option for obj meshes (instead of js)
 	p.add_argument("--obj", action="store_true")
 	args = p.parse_args(sys.argv[1:])
+
+	utils.Echo.quiet = args.q
+	utils.Echo.very_quiet = args.qq
 
 	format_args = {
 		"images": "Texture2D",
@@ -105,9 +111,9 @@ def main():
 	for file in files:
 		bundle_name = utils.filename_no_ext(file)
 		if bundle_name in EXCLUDES:
-			print("Skipping %s..." % (bundle_name))
+			info("Skipping %s..." % (bundle_name))
 			continue
-		print("Extracting %s..." % (bundle_name))
+		info("Extracting %s..." % (bundle_name))
 		save_path = os.path.join(args.output, bundle_name)
 
 		with open(file, "rb") as f:

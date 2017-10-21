@@ -1,3 +1,6 @@
+import utils
+
+(debug, info, error) = utils.Echo.echo()
 
 class BabylonMesh:
 	"""JSON Mesh format defined by Babylon.js"""
@@ -131,7 +134,7 @@ class BabylonMesh:
 			"skeletons": []
 		}
 
-		print(f"v {len(mesh['positions'])/3} n {len(mesh['normals'])/3} i {len(mesh['indices'])/3} uv {len(mesh['uvs'])/2}")
+		debug(f"v {len(mesh['positions'])/3} n {len(mesh['normals'])/3} i {len(mesh['indices'])/3} uv {len(mesh['uvs'])/2}")
 
 		return json.dumps(babylon)
 
