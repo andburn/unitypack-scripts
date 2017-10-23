@@ -2,7 +2,6 @@
 
 import os
 from enum import Enum, auto
-from collections import namedtuple
 from io import BytesIO
 import unitypack
 from unitypack.engine.object import field
@@ -20,7 +19,14 @@ class API(Enum):
 	OPENGL = auto()
 
 
-ShaderType = namedtuple("ShaderType", "program api version")
+class ShaderType:
+	def __init__(self, prog, api, version):
+		self.program = prog
+		self.api = api
+		self.version = version
+
+	def __str__(self):
+		return f"{self.api.name} {self.program.name}"
 
 
 shader_type_map = {
@@ -61,7 +67,6 @@ def redefine_shader():
 	Shader.parsed_form = field("m_ParsedForm", ParsedForm)
 
 
-# TODO better!
 def supported_shader_asset(obj):
 	try:
 		obj.parsed_form
@@ -77,6 +82,7 @@ def extract_shader(shader, dir):
 	if not supported_shader_asset(shader):
 		print("The shader asset has an unsupported format")
 		return
+	# TODO more robust replacement of chars
 	name = shader.parsed_form.name.replace("/", "_")
 	print(f"Extracting '{name}'")
 	# create output path for each shader
@@ -84,57 +90,58 @@ def extract_shader(shader, dir):
 	utils.make_dirs(out_dir)
 
 	compressed = unitypack.utils.BinaryReader(BytesIO(shader.blob))
+	# check blob sizes and offsets match up
 	assert compressed.buf.getbuffer().nbytes == sum(shader.compressed_sizes)
 	assert len(shader.compressed_sizes) == len(shader.decompressed_sizes)
 	assert len(shader.compressed_sizes) == len(shader.compressed_offsets)
 
+	# decompress each shader format and extract the subprograms
 	for i, s in enumerate(shader.compressed_sizes):
-		# decompress lz4 frames
+		# decompress lz4 frame
 		compressed.seek(shader.compressed_offsets[i])
 		uncompressed = unitypack.utils.lz4_decompress(
 			compressed.read(s), shader.decompressed_sizes[i]
 		)
-
 		data = unitypack.utils.BinaryReader(BytesIO(uncompressed))
-
 		# read header for subshader offsets and lengths
 		index = []
 		num_subprograms = data.read_int()
 		for i in range(num_subprograms):
 			index.append((data.read_int(), data.read_int()))
-
 		# extract each subshader
 		for offset, length in index:
 			data.seek(offset)
-			sdata = data.read(length)
-			b = unitypack.utils.BinaryReader(BytesIO(sdata))
-			# unknown, seems to be same for all shaders, version date/time-stamp
-			sid = b.read_int()
+			# read the subshader bytes
+			b = unitypack.utils.BinaryReader(BytesIO(data.read(length)))
+			# unity date-stamp, version?
+			date_stamp = b.read_int()
 			# use the map to retrieve the shader type
 			stype_id = b.read_int()
 			if stype_id in shader_type_map:
 				stype = shader_type_map[stype_id]
 			if stype == None or stype.api != API.D3D9:
-				print("Skipping unsupported shader type (%d)" % (stype_id))
+				print("Skipping unsupported shader type (%s)" % (stype))
 				continue
 			# XXX unknown series of bytes (12)
-			u2, u3, u4 = (b.read_int(), b.read_int(), b.read_int())
+			u1, u2, u3 = (b.read_int(), b.read_int(), b.read_int())
+			# XXX another four bytes in 5.6
+			u4 = b.read_int()
 			# the number of associated shader keywords
-			num_tags = b.read_int()
-			# get the tag strings
-			# TODO do something better with tags
-			tags = []
-			for t in range(num_tags):
+			keyword_count = b.read_int()
+			# get the keyword strings
+			keywords = []
+			for t in range(keyword_count):
 				size = b.read_int()
-				tags.append(b.read_string(size))
+				keywords.append(b.read_string(size))
 				b.align()
+			# TODO do something more with keywords?
 			# the length of the shader bytecode
-			length = b.read_int()
+			code_len = b.read_int()
+			data_out = b.read(code_len)
 			# read bytecode
 			file_ext = ".vert" if stype.program == Program.VERTEX else ".frag"
-			file_tags = "_".join(tags)
-			file_name = f"{name}-{file_tags}{file_ext}"
-			data_out = b.read(length)
+			file_keywords = "_".join(keywords)
+			file_name = f"{name}-{file_keywords}{file_ext}"
 			utils.write_to_file(os.path.join(out_dir, file_name), data_out, "wb", False, True)
 			# TODO some other stuff at the end, not sure what it is
 			# TODO it is the embedded CTAB (constant table), deal with it
