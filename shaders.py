@@ -5,6 +5,7 @@ from enum import Enum, auto
 from io import BytesIO
 import unitypack
 from unitypack.engine.object import field
+import mojoparser
 import utils
 
 
@@ -95,6 +96,8 @@ def extract_shader(shader, dir):
 	assert len(shader.compressed_sizes) == len(shader.decompressed_sizes)
 	assert len(shader.compressed_sizes) == len(shader.compressed_offsets)
 
+	# crate object to parse shader bytecode
+	bytecode_parser = mojoparser.Parser()
 	# decompress each shader format and extract the subprograms
 	for i, s in enumerate(shader.compressed_sizes):
 		# decompress lz4 frame
@@ -138,10 +141,16 @@ def extract_shader(shader, dir):
 			# the length of the shader bytecode
 			code_len = b.read_int()
 			data_out = b.read(code_len)
-			# read bytecode
+			# disassemble bytecode to glsl
+			try:
+				parsed_data = bytecode_parser.parse(data_out)
+			except Exception as e:
+				print(e)
+				continue
+			# write glsl code
 			file_ext = ".vert" if stype.program == Program.VERTEX else ".frag"
 			file_keywords = "_".join(keywords)
 			file_name = f"{name}-{file_keywords}{file_ext}"
-			utils.write_to_file(os.path.join(out_dir, file_name), data_out, "wb", False, True)
+			utils.write_to_file(os.path.join(out_dir, file_name), str(parsed_data))
 			# TODO some other stuff at the end, not sure what it is
 			# TODO it is the embedded CTAB (constant table), deal with it

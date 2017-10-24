@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "9793b7475b5d7d98303e8e529e1c174b1d455bc23492a663619cea4c98ac4065"
+            "sha256": "67753dcca6308bc56574635661de7fd0d6948623fa2231f3e65266b446918547"
         },
         "host-environment-markers": {
             "implementation_name": "cpython",
@@ -44,6 +44,9 @@
                 "sha256:a0423290a6e89c1789525a7e9d344d877c7a97102cf5c0f99b2319ac560f1b3e"
             ],
             "version": "==0.10.1"
+        },
+        "mojoparser": {
+            "git": "https://github.com/andburn/python-mojoparser.git"
         },
         "olefile": {
             "hashes": [
