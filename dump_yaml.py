@@ -85,7 +85,11 @@ def main():
 
 	dir_in = sys.argv[1]
 	dir_out = sys.argv[2]
-	files = glob.glob(dir_in + "/*" + FILE_EXT)
+
+	if dir_in.endswith(FILE_EXT):
+		files = [dir_in]
+	else:
+		files = glob.glob(dir_in + "/*" + FILE_EXT)
 
 	# define default representers and constructors for unity engine objects
 	for k, v in engine.__dict__.items():
