@@ -44,7 +44,7 @@ shader_type_map = {
 
 
 class ParsedForm(unitypack.engine.object.Object):
-	"""Define the basic properties of the parsed Shaderlab file in 5.6+"""
+	"""Define the basic properties of the parsed Shaderlab file in 5.6"""
 	name = field("m_Name")
 	ed_name = field("m_CustomEditorName")
 	fallback_name = field("m_FallbackName")
@@ -53,11 +53,10 @@ class ParsedForm(unitypack.engine.object.Object):
 
 
 def redefine_shader():
-	"""Redefine the UnityPack Shader object for 5.6+"""
+	"""Redefine the UnityPack Shader object for 5.6"""
 	from unitypack.engine import Shader
 
 	Shader.script = None
-	Shader.path_name = None
 	Shader.dependencies = field("m_Dependencies")
 	Shader.decompressed_sizes = field("decompressedLengths")
 	Shader.compressed_sizes = field("compressedLengths")
@@ -68,7 +67,8 @@ def redefine_shader():
 	Shader.parsed_form = field("m_ParsedForm", ParsedForm)
 
 
-def supported_shader_asset(obj):
+def shader_has_compatible_props(obj):
+	"""Check if object has the properties we expect from a shader"""
 	try:
 		obj.parsed_form
 		obj.compressed_sizes
@@ -79,24 +79,24 @@ def supported_shader_asset(obj):
 		return False
 
 
-def extract_shader(shader, dir):
-	if not supported_shader_asset(shader):
+def extract_shader(shader, dir, debug=False):
+	if not shader_has_compatible_props(shader):
 		print("The shader asset has an unsupported format")
 		return
-	# TODO more robust replacement of chars
-	name = shader.parsed_form.name.replace("/", "_")
-	print(f"Extracting '{name}'")
-	# create output path for each shader
-	out_dir = os.path.join(dir, name) + os.sep
-	utils.make_dirs(out_dir)
 
+	# create output path for each shader
+	name = os.path.basename(shader.parsed_form.name)
+	path = os.path.normpath(os.path.join(dir, shader.parsed_form.name))
+	os.makedirs(path, exist_ok=True)
+
+	print(f"Extracting '{shader.parsed_form.name}'")
 	compressed = unitypack.utils.BinaryReader(BytesIO(shader.blob))
 	# check blob sizes and offsets match up
 	assert compressed.buf.getbuffer().nbytes == sum(shader.compressed_sizes)
 	assert len(shader.compressed_sizes) == len(shader.decompressed_sizes)
 	assert len(shader.compressed_sizes) == len(shader.compressed_offsets)
 
-	# crate object to parse shader bytecode
+	# crate shader bytecode parser object
 	bytecode_parser = mojoparser.Parser()
 	# decompress each shader format and extract the subprograms
 	for i, s in enumerate(shader.compressed_sizes):
@@ -112,10 +112,12 @@ def extract_shader(shader, dir):
 		for i in range(num_subprograms):
 			index.append((data.read_int(), data.read_int()))
 		# extract each subshader
+		count = 0
 		for offset, length in index:
 			data.seek(offset)
 			# read the subshader bytes
-			b = unitypack.utils.BinaryReader(BytesIO(data.read(length)))
+			sub_bytes = data.read(length)
+			b = unitypack.utils.BinaryReader(BytesIO(sub_bytes))
 			# unity date-stamp, version?
 			date_stamp = b.read_int()
 			# use the map to retrieve the shader type
@@ -123,11 +125,12 @@ def extract_shader(shader, dir):
 			if stype_id in shader_type_map:
 				stype = shader_type_map[stype_id]
 			if stype == None or stype.api != API.D3D9:
-				print("Skipping unsupported shader type (%s)" % (stype))
+				if debug:
+					print(f"Skipping unsupported type ({stype}) @ {offset}")
 				continue
 			# XXX unknown series of bytes (12)
 			u1, u2, u3 = (b.read_int(), b.read_int(), b.read_int())
-			# XXX another four bytes in 5.6
+			# XXX another four bytes in 5.6 ?
 			u4 = b.read_int()
 			# the number of associated shader keywords
 			keyword_count = b.read_int()
@@ -137,20 +140,30 @@ def extract_shader(shader, dir):
 				size = b.read_int()
 				keywords.append(b.read_string(size))
 				b.align()
-			# TODO do something more with keywords?
-			# the length of the shader bytecode
-			code_len = b.read_int()
-			data_out = b.read(code_len)
-			# disassemble bytecode to glsl
+			print(f"subprogram ({stype}) @ {offset} [{' '.join(keywords)}]")
+			# read the bytecode data
+			raw_data = b.read(b.read_int())
+
+			# NOTE after the shader bytecode there is a section that looks to be
+			#	the shader properties or constants, unable to figure out the
+			#	format. Don't think its necesssary as the bytecode has an
+			#	embeded constant table 'CTAB'
+
+			# disassemble bytecode
 			try:
-				parsed_data = bytecode_parser.parse(data_out)
-			except Exception as e:
-				print(e)
+				parsed_data = bytecode_parser.parse(raw_data)
+			except Exception as e: # TODO use mojoparser exceptions here
+				print(f"WARNING: {e}")
 				continue
-			# write glsl code
-			file_ext = ".vert" if stype.program == Program.VERTEX else ".frag"
-			file_keywords = "_".join(keywords)
-			file_name = f"{name}-{file_keywords}{file_ext}"
-			utils.write_to_file(os.path.join(out_dir, file_name), str(parsed_data))
-			# TODO some other stuff at the end, not sure what it is
-			# TODO it is the embedded CTAB (constant table), deal with it
+
+			# set the filename
+			filename = os.path.join(path, f"{name}.{offset}")
+			ext = ".vert" if stype.program == Program.VERTEX else ".frag"
+			# write dissambled code
+			utils.write_to_file(filename + ext, str(parsed_data))
+			# write keywords to file
+			if keywords:
+				utils.write_to_file(filename + ".tags", "\n".join(keywords))
+			# write full subshader blob
+			if debug:
+				utils.write_to_file(filename + ".bin", sub_bytes, "wb")
