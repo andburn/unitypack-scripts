@@ -152,8 +152,8 @@ def extract_shader(shader, dir, debug=False):
 			# disassemble bytecode
 			try:
 				parsed_data = bytecode_parser.parse(raw_data)
-			except Exception as e: # TODO use mojoparser exceptions here
-				print(f"WARNING: {e}")
+			except mojoparser.ParseFailureError as err:
+				print(f"WARNING: {err}")
 				continue
 
 			# set the filename
