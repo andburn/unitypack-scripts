@@ -36,10 +36,10 @@ shader_type_map = {
 	11: ShaderType(Program.FRAGMENT, API.D3D9, 2.0),
 	12: ShaderType(Program.FRAGMENT, API.D3D9, 3.0),
 
-	15: ShaderType(Program.VERTEX, API.D3D11, 2.0),
-	16: ShaderType(Program.VERTEX, API.D3D11, 3.0),
-	17: ShaderType(Program.FRAGMENT, API.D3D11, 2.0),
-	18: ShaderType(Program.FRAGMENT, API.D3D11, 3.0),
+	15: ShaderType(Program.VERTEX, API.D3D11, 4.0),
+	16: ShaderType(Program.VERTEX, API.D3D11, 5.0),
+	17: ShaderType(Program.FRAGMENT, API.D3D11, 4.0),
+	18: ShaderType(Program.FRAGMENT, API.D3D11, 5.0),
 }
 
 
@@ -124,9 +124,8 @@ def extract_shader(shader, dir, debug=False):
 			stype_id = b.read_int()
 			if stype_id in shader_type_map:
 				stype = shader_type_map[stype_id]
-			if stype == None or stype.api != API.D3D9:
-				if debug:
-					print(f"Skipping unsupported type ({stype}) @ {offset}")
+			if stype == None:
+				print(f"Skipping unsupported type ({stype}) @ {offset}")
 				continue
 			# XXX unknown series of bytes (12)
 			u1, u2, u3 = (b.read_int(), b.read_int(), b.read_int())
@@ -149,21 +148,23 @@ def extract_shader(shader, dir, debug=False):
 			#	format. Don't think its necesssary as the bytecode has an
 			#	embeded constant table 'CTAB'
 
-			# disassemble bytecode
-			try:
-				parsed_data = bytecode_parser.parse(raw_data)
-			except mojoparser.ParseFailureError as err:
-				print(f"WARNING: {err}")
-				continue
-
+			# disassemble DX9 bytecode
+			if stype.api == API.D3D9:
+				try:
+					parsed_data = bytecode_parser.parse(raw_data, mojoparser.Profile.GLSL110)
+				except mojoparser.ParseFailureError as err:
+					print(f"WARNING: {err}")
+					continue
 			# set the filename
-			filename = os.path.join(path, f"{name}.{offset}")
+			filename = os.path.join(path, f"{name}.{stype.api}.{offset}")
 			ext = ".vert" if stype.program == Program.VERTEX else ".frag"
-			# write dissambled code
-			utils.write_to_file(filename + ext, str(parsed_data))
+			# write DX9 shaders to file
+			if stype.api == API.D3D9:
+				utils.write_to_file(filename + ext, str(parsed_data))
 			# write keywords to file
 			if keywords:
 				utils.write_to_file(filename + ".tags", "\n".join(keywords))
 			# write full subshader blob
 			if debug:
 				utils.write_to_file(filename + ".bin", sub_bytes, "wb")
+				utils.write_to_file(filename + ".co", raw_data, "wb")
