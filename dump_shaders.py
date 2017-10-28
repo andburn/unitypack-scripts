@@ -18,6 +18,7 @@ def main():
 	p = ArgumentParser()
 	p.add_argument("input")
 	p.add_argument("output")
+	p.add_argument("--debug", action="store_true")
 	args = p.parse_args(sys.argv[1:])
 
 	files = [args.input]
@@ -43,7 +44,7 @@ def main():
 				if obj.type == "Shader":
 					d = obj.read()
 					print(d.name)
-					extract_shader(d, save_path)
+					extract_shader(d, save_path, args.debug)
 				#except Exception as e:
 				#	print("[Error] %s" % (e))
 
