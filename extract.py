@@ -11,7 +11,7 @@ from unitypack.export import OBJMesh
 from argparse import ArgumentParser
 from PIL import ImageOps
 import utils
-from objects import JSONMesh
+from meshes import JSONMesh, BabylonMesh
 
 
 EXCLUDES = ["sounds0"]
@@ -37,8 +37,8 @@ def handle_asset(asset, handle_formats, dir, flip, objMesh, quiet):
 				mesh_data = None
 
 				if not objMesh:
-					mesh_data = JSONMesh(d).export()
-					utils.write_to_file(save_path + ".js", mesh_data, mode="w")
+					mesh_data = BabylonMesh(d).export()
+					utils.write_to_file(save_path + ".babylon", mesh_data, mode="w")
 
 				mesh_data = OBJMesh(d).export()
 				utils.write_to_file(save_path + ".obj", mesh_data, mode="w")
