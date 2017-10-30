@@ -151,9 +151,9 @@ def extract_shader_attributes(parsed):
 		defs.append("// %s %d" % (
 			mojoparser.UniformType(parsed.constants[j].type),
 			parsed.constants[j].index))
-		print(*parsed.constants[j].value.f)
-		print(*parsed.constants[j].value.i)
-		print(parsed.constants[j].value.b)
+		#print(*parsed.constants[j].value.f)
+		#print(*parsed.constants[j].value.i)
+		#print(parsed.constants[j].value.b)
 
 	defs.append("//-- %d Outputs" % (parsed.output_count))
 	for j in range(parsed.output_count):
