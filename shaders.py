@@ -3,6 +3,7 @@
 import os
 from enum import Enum, auto
 from io import BytesIO
+from operator import attrgetter
 import unitypack
 from unitypack.engine.object import field
 import mojoparser
@@ -80,6 +81,89 @@ def shader_has_compatible_props(obj):
 		return True
 	except KeyError:
 		return False
+
+
+class UniformSymbol:
+	def __init__(self, name, type, index):
+		self.name = name.decode("ascii")
+		self.type = type
+		self.index = index
+
+	def __str__(self):
+		return "%s %d [%d]" % (self.name, self.type, self.index)
+
+	def str_assign(self):
+		return "uniform vec4 %s;" % (self.name)
+
+	def str_define(self, is_pixel_shader=False):
+		prefix = "ps" if is_pixel_shader else "vs"
+		return "#define %s_c%d %s" % (prefix, self.index, self.name)
+
+def extract_shader_attributes(parsed):
+	defs = []
+	symbols = []
+	tex_symbols = []
+
+	is_pixel = True if parsed.shader_type == mojoparser.ShaderType.PIXEL else False
+
+	defs.append("//-- %d Uniforms" % (parsed.uniform_count))
+	defs.append("//-- %d Constants" % (parsed.constant_count))
+	defs.append("//-- %d Samplers" % (parsed.sampler_count))
+	defs.append("//-- %d Attributes" % (parsed.attribute_count))
+	defs.append("//-- %d Outputs" % (parsed.output_count))
+	defs.append("//-- %d Swizzles" % (parsed.swizzle_count))
+	defs.append("//-- %d Symbols\n" % (parsed.symbol_count))
+
+	defs.append("//-- %d Symbols" % (parsed.symbol_count))
+	for j in range(parsed.symbol_count):
+		sym = UniformSymbol(
+			parsed.symbols[j].name,
+			parsed.symbols[j].register_set,
+			parsed.symbols[j].register_index)
+		defs.append("// %s" % (str(sym)))
+		if parsed.symbols[j].register_set == mojoparser.SymbolRegisterSet.SAMPLER:
+			tex_symbols.append(sym)
+		else:
+			symbols.append(sym)
+	symbols.sort(key=attrgetter("index"))
+	tex_symbols.sort(key=attrgetter("index"))
+	defs = defs + [s.str_assign() for s in symbols] \
+		+ [s.str_define(is_pixel) for s in symbols] \
+		+ ["//-- Samplers"] + [str(s) for s in tex_symbols]
+
+	defs.append("//-- %d Attributes" % (parsed.attribute_count))
+	for j in range(parsed.attribute_count):
+		defs.append("// %s %s %d" % (
+			parsed.attributes[j].name,
+			mojoparser.Usage(parsed.attributes[j].usage),
+			parsed.attributes[j].index))
+
+	defs.append("//-- %d Uniforms" % (parsed.uniform_count))
+	for j in range(parsed.uniform_count):
+		defs.append("// %s %s %d %d %d" % (
+			parsed.uniforms[j].name,
+			mojoparser.UniformType(parsed.uniforms[j].type),
+			parsed.uniforms[j].array_count, parsed.uniforms[j].index,
+			parsed.uniforms[j].constant))
+
+	defs.append("//-- %d Constants" % (parsed.constant_count))
+	for j in range(parsed.constant_count):
+		defs.append("// %s %d" % (
+			mojoparser.UniformType(parsed.constants[j].type),
+			parsed.constants[j].index))
+		print(*parsed.constants[j].value.f)
+		print(*parsed.constants[j].value.i)
+		print(parsed.constants[j].value.b)
+
+	defs.append("//-- %d Outputs" % (parsed.output_count))
+	for j in range(parsed.output_count):
+		defs.append("// %s %s %d" % (
+			parsed.outputs[j].name,
+			mojoparser.Usage(parsed.outputs[j].usage),
+			parsed.outputs[j].index))
+
+
+	return "\n".join(defs) + "\n\n" + str(parsed).replace("\n", "")
 
 
 def extract_shader(shader, dir, raw=False):
@@ -169,6 +253,8 @@ def extract_shader(shader, dir, raw=False):
 			# write keywords to file
 			if keywords:
 				utils.write_to_file(filename + ".tags", "\n".join(keywords))
+			# debug shader attribute data, from parsed bytecode
+			debug(extract_shader_attributes(parsed_data))
 			# write full subshader blob
 			if raw:
 				utils.write_to_file(filename + ".bin", sub_bytes, "wb")
