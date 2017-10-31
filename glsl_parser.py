@@ -6,8 +6,8 @@ import os
 import sys
 from collections import namedtuple
 from pyparsing import (
-	Suppress, Word, Literal, OneOrMore, ZeroOrMore, Optional, Combine, SkipTo, 
-	Group, delimitedList, oneOf, alphas, alphanums, nums, stringEnd, Forward,
+	Suppress, Word, Literal, OneOrMore, ZeroOrMore, Optional, Combine, SkipTo,
+	Group, delimitedList, oneOf, alphas, alphanums, nums, StringEnd, Forward,
 	ParseException
 )
 
@@ -28,25 +28,29 @@ def parse(text):
 
 	# operators
 	operator = PLUS | DASH | ASTERIX | SLASH
-	comparator = Combine(EQ + EQ) | Combine(LESS + EQ) | (GREAT + EQ) | LESS | GREAT
+	comparator = (
+		Combine(EQ + EQ) | Combine(BANG + EQ) |
+		Combine(LESS + EQ) | Combine(GREAT + EQ) |
+		LESS | GREAT
+	)
 
 	# keywords
 	type_qualifier = oneOf("const attribute varying uniform")
 	type_specifier = oneOf("float int bool vec2 vec3 vec4 mat2 mat3 mat4 sampler2D samplerCube")
 
-	functions = """radians degrees sin cos tan asin acos atan pow exp log exp2 
-	log2 sqrt inversesqrt abs sign floor ceil fract mod min max clamp mix step 
-	smoothstep length distance dot cross normalize ftransform faceforward 
-	reflect refract	matrixCompMult outerProduct transpose lessThan lessThanEqual 
+	functions = """radians degrees sin cos tan asin acos atan pow exp log exp2
+	log2 sqrt inversesqrt abs sign floor ceil fract mod min max clamp mix step
+	smoothstep length distance dot cross normalize ftransform faceforward
+	reflect refract	matrixCompMult outerProduct transpose lessThan lessThanEqual
 	greaterThan	greaterThanEqual equal notEqual any all not texture1D texture1DProj
-	texture1DLod texture1DProjLod texture2D texture2DProj texture2DLod 
+	texture1DLod texture1DProjLod texture2D texture2DProj texture2DLod
 	texture2DProjLod texture3D texture3DProj texture3DLod texture3DProjLod
 	textureCube textureCubeLod shadow1D shadow1DProj shadow1DLod shadow1DProjLod
 	shadow2D shadow2DProj shadow2DLod shadow2DProjLod dFdx dFdy fwidth noise1
 	noise2 noise3 noise4
 	"""
-	# TODO deal types properly
-	builtin_functions = oneOf(functions + "vec2 vec3 vec4 float")
+	# TODO deal with types properly, and discard keyword
+	builtin_functions = oneOf(functions + "vec2 vec3 vec4 float discard")
 
 	# constants
 	float_const = Combine(Optional(DASH) + Word(nums) + DOT + Word(nums))
@@ -83,35 +87,49 @@ def parse(text):
 	# rhs expressions
 	binary_operation = Forward()
 	function = Forward()
-	
-	unary_expr = DASH + ident_swizzle
+
+	unary_expr = DASH + (function | ident_swizzle)
 	unary_expr.setParseAction(lambda t : Unary(t[1], t[0]))
 
 	operand = function | unary_expr | ident_swizzle | const
 	function_param = binary_operation | operand
 
 	function << (builtin_functions + LPAR + delimitedList(function_param) + RPAR)
-	binary_operation <<= (operand + (operator | comparator) + operand) | (LPAR + binary_operation + RPAR + (operator | comparator) + operand) | (LPAR + binary_operation + RPAR)
-	
+	binary_operation <<= (
+		(LPAR + binary_operation + RPAR + (operator | comparator) + operand)
+		| (LPAR + binary_operation + RPAR)
+		| (operand + (operator | comparator) + binary_operation)
+		| (operand + (operator | comparator) + operand)
+	)
+
 	function.setParseAction(lambda t : Function(t[0], t[1:]))
 
 	comparison = operand + comparator + operand
 	ternary_expr = LPAR + LPAR + comparison + RPAR + QUESTION + operand + COLON + operand + RPAR
 
-	expr = ternary_expr | binary_operation | function | unary_expr | ident_swizzle
+	expr = ternary_expr | binary_operation | unary_expr | function | ident_swizzle
 
 	instruction = ident_swizzle + EQ + expr + SEMI
 
+	block = LBRACE + OneOrMore(instruction) + RBRACE
+	# temp for inline if
+	if_discard = Literal("if") + LPAR + function + RPAR + Literal("discard")
+	if_only = Literal("if") + LPAR + comparison + RPAR + block
+	if_else = if_only + Literal("else") + block
+
+	conditional = if_else | if_only | if_discard + SEMI
+
+	statements = instruction | conditional
 
 	# main function
 	main_function = Suppress("void") + Suppress("main") + LPAR + RPAR + \
-		LBRACE + OneOrMore(instruction).setResultsName("instructions")  + RBRACE
+		LBRACE + OneOrMore(statements).setResultsName("instructions")  + RBRACE
 
 	# opengl version
 	version = Suppress("#version") + Word(nums).setResultsName("version")
 
 	# top-level rule
-	parser = version + ZeroOrMore(decl_expr) + main_function + stringEnd
+	parser = version + ZeroOrMore(decl_expr) + main_function + StringEnd()
 
 	return parser.parseString(text)
 
@@ -132,7 +150,7 @@ def run_on_all(dir):
 			if ext == "vert" or ext == "frag":
 				total += 1
 				with open(file_path) as f:
-					contents = f.read()	
+					contents = f.read()
 				try:
 					parse(contents)
 				except ParseException as pe:
@@ -140,7 +158,7 @@ def run_on_all(dir):
 					print(f"\nFAILED: {file_path}")
 					print(f"\t{pe}\n")
 					print(pe.markInputline())
-	
+
 	print(f"{total} files | {failed} failed")
 
 
@@ -155,9 +173,9 @@ def main():
 		run_on_all(filepath)
 	elif sys.argv[1] == '-s':
 		with open(filepath) as f:
-			contents = f.read()	
+			contents = f.read()
 		try:
-			parse(contents)
+			print(parse(contents))
 		except ParseException as pe:
 			print(pe)
 			print(pe.markInputline())
