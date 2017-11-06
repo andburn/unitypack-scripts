@@ -26,6 +26,7 @@ class Identifier:
 		self.swizzle = None
 		# index and swizzle stored as list,
 		# but should only have one element
+		# XXX not sure about that, don't think this does anything
 		if index and len(index) == 1:
 			self.index = index[0]
 		if swizzle and len(swizzle) == 1:
@@ -132,16 +133,25 @@ class Unary:
 
 
 class Binary:
-	def __init__(self, op, paraml, paramr):
+	def __init__(self, op, paraml, paramr, precedence=False):
 		self.operation = op
 		self.param_left = paraml
 		self.param_right = paramr
+		self.precedence = precedence
 
 	def __repr__(self):
-		return "Binary(op={} pl={} pr={}".format(self.operation, self.param_left, self.param_right)
+		return "Binary(op={} pl={} pr={} prec={})".format(
+			self.operation, self.param_left,
+			self.param_right, self.precedence)
 
 	def __str__(self):
-		return "{1} {0} {2}".format(self.operation, self.param_left, self.param_right)
+		return "{}{} {} {}{}".format(
+				"(" if self.precedence else "",
+				self.param_left,
+				self.operation,
+				self.param_right,
+				")" if self.precedence else ""
+			)
 
 
 class IfBlock:
@@ -183,7 +193,41 @@ def new_assign(tokens):
 
 
 def new_binary(tokens):
-	pass
+	#print(">>>> {}".format(list(map(str, tokens))))
+	ops = "+ - * / > < >= <= == !=".split()
+	nested = 0
+	op = None
+	preced = False
+	param = []
+	binary = Binary(None, None, None)
+	for t in tokens:
+		if t == "(":
+			nested += 1
+			preced = True
+		elif t == ")":
+			nested -= 1
+		elif t in ops:
+			if nested == 0:
+				binary.operation = t
+				if preced:
+					try:
+						# if param is a Binary, add precedence
+						# should be single param
+						assert len(param) == 1
+						param[0].precedence = preced
+					except:
+						# log an assertion failed here
+						print(param)
+						raise
+				binary.param_left = param[0]
+				param = []
+				preced = False
+		else:
+			param.append(t)
+	assert len(param) == 1
+	binary.param_right = param[0]
+
+	return binary
 
 
 def new_if_block(tokens):
@@ -205,7 +249,7 @@ def parse(text):
 	"""Run the parser on the given text"""
 
 	# arithmetic and boolean operators
-	operator = PLUS | DASH | ASTERIX | SLASH
+	algebraic_operator = PLUS | DASH | ASTERIX | SLASH
 	comparator = (
 		Combine(EQ + EQ) | Combine(BANG + EQ) |
 		Combine(LESS + EQ) | Combine(GREAT + EQ) |
@@ -282,13 +326,18 @@ def parse(text):
 
 	operand = function | unary_expr | ident_swizzle | const
 	function_param = binary_operation | operand
+	operator = algebraic_operator | comparator
 
-	function << (builtin_functions + Suppress(LPAR) + delimitedList(function_param) + Suppress(RPAR))
-	binary_operation <<= (
-		(LPAR + binary_operation + RPAR + (operator | comparator) + operand)
+	function << (
+		builtin_functions + Suppress(LPAR)
+		+ delimitedList(function_param) + Suppress(RPAR)
+	)
+
+	binary_operation << (
+		(LPAR + binary_operation + RPAR + operator + operand)
 		| (LPAR + binary_operation + RPAR)
-		| (operand + (operator | comparator) + binary_operation)
-		| (operand + (operator | comparator) + operand)
+		| (operand + operator + binary_operation)
+		| (operand + operator + operand)
 	)
 
 	function.setParseAction(lambda t : Function(t[0], t[1:]))
@@ -306,7 +355,7 @@ def parse(text):
 	block = LBRACE + OneOrMore(instruction) + RBRACE
 
 	if_only = (
-		Literal("if") + LPAR + comparison.setResultsName("if_comp") + RPAR
+		Literal("if") + LPAR + binary_operation.setResultsName("if_comp") + RPAR
 		+ block.setResultsName("if_block")
 	)
 	if_else = if_only + Literal("else") + block.setResultsName("else_block")
@@ -320,7 +369,7 @@ def parse(text):
 
 	statements = instruction | conditional
 
-	# opengl version
+	# glsl version
 	version = Suppress("#version") + Word(nums).setResultsName("version")
 
 	# main function
