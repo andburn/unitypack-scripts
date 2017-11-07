@@ -10,239 +10,17 @@ from pyparsing import (
 	Group, delimitedList, oneOf, alphas, alphanums, nums, StringEnd, Forward,
 	ParseException
 )
-
+from glsl_objects import (
+	Identifier, Define, Declare, Assignment, Function, Instruction, Unary,
+	Binary, IfBlock, new_ident, new_declare, new_assign, new_binary,
+	new_if_block
+)
 
 LBRACE, RBRACE, LBRACK, RBRACK = map(Suppress, "{}[]")
 PLUS, DASH, SLASH, ASTERIX, PERCENT, EQ, DOT = map(Literal, "+-/*%=.")
 COLON, SEMI, COMMA, HASH, QUESTION = map(Suppress, ":;,#?")
 CARET, BAR, AMPERSAND, TILDE = map(Suppress, "^|&~")
 LESS, GREAT, LPAR, RPAR, BANG = map(Literal, "<>()!")
-
-
-class Identifier:
-	def __init__(self, name, index, swizzle):
-		self.name = name
-		self.index = None
-		self.swizzle = None
-		# index and swizzle stored as list,
-		# but should only have one element
-		# XXX not sure about that, don't think this does anything
-		if index and len(index) == 1:
-			self.index = index[0]
-		if swizzle and len(swizzle) == 1:
-			self.swizzle = swizzle[0]
-
-	def __repr__(self):
-		r = ["Ident(name=", self.name]
-		if self.index:
-			r.append(", index={}".format(self.index))
-		if self.swizzle:
-			r.append(", swizzle={}".format(self.swizzle))
-		r.append(")")
-		return "".join(r)
-
-	def __str__(self):
-		s = [self.name]
-		if self.index:
-			s.extend(["[", self.index[0], "]"])
-		if self.swizzle:
-			s.extend([".", self.swizzle[0]])
-		return "".join(s)
-
-
-class Define:
-	def __init__(self, dest, src):
-		self.src = src
-		self.dest = dest
-
-	def __repr__(self):
-		return f"Define(dest={self.dest} src={self.src})"
-
-	def __str__(self):
-		return f"#define {self.dest} {self.src}"
-
-
-class Declare:
-	def __init__(self, qualifier, dtype, ident, value=None):
-		self.qualifier = qualifier
-		self.type = dtype
-		self.ident = ident
-		self.value = value
-
-	def __repr__(self):
-		return f"Declare(qual={self.qualifier} type={self.type} ident={self.ident} value={self.value})"
-
-	def __str__(self):
-		s = []
-		if self.qualifier:
-			s.append(self.qualifier)
-		s.append(self.type)
-		s.append(str(self.ident))
-		if self.value:
-			s.extend(["=", str(self.value)])
-		return " ".join(s) + ";"
-
-
-class Assignment:
-	def __init__(self, dtype, value):
-		self.type = dtype
-		self.value = value
-
-	def __repr__(self):
-		return f"Assign(type={self.type}, value={self.value})"
-
-	def __str__(self):
-		values = ", ".join(map(str, self.value))
-		return f"{self.type}({values})"
-
-
-class Function:
-	def __init__(self, name, params):
-		self.name = name
-		self.params = params
-
-	def __repr__(self):
-		return "Func(name={}, params={})".format(self.name, self.params)
-
-	def __str__(self):
-		return "{}({})".format(self.name, ", ".join(map(str, self.params)))
-
-
-class Instruction:
-	def __init__(self, ident, expr):
-		self.ident = ident
-		self.expression = expr
-
-	def __repr__(self):
-		return "Ins(ident={}, expr={})".format(self.ident, self.expression)
-
-	def __str__(self):
-		return "{} = {};".format(self.ident, " ".join(map(str, self.expression)))
-
-
-class Unary:
-	def __init__(self, op, param):
-		self.operation = op
-		self.param = param
-
-	def __repr__(self):
-		return "Unary(op={}, expr={})".format(self.operation, self.param)
-
-	def __str__(self):
-		return "{}{}".format(self.operation, self.param)
-
-
-class Binary:
-	def __init__(self, op, paraml, paramr, precedence=False):
-		self.operation = op
-		self.param_left = paraml
-		self.param_right = paramr
-		self.precedence = precedence
-
-	def __repr__(self):
-		return "Binary(op={} pl={} pr={} prec={})".format(
-			self.operation, self.param_left,
-			self.param_right, self.precedence)
-
-	def __str__(self):
-		return "{}{} {} {}{}".format(
-				"(" if self.precedence else "",
-				self.param_left,
-				self.operation,
-				self.param_right,
-				")" if self.precedence else ""
-			)
-
-
-class IfBlock:
-	def __init__(self, comp, if_block, else_block):
-		self.comparison = comp
-		self.if_block = if_block
-		self.else_block = else_block
-
-	def __repr__(self):
-		return "If(comp={}, if={}, else={})".format(self.comparison, self.if_block, self.else_block)
-
-	def __str__(self):
-		return "if ({})".format(self.comparison)
-
-
-def new_ident(tokens):
-	ident = Identifier(None, None, None)
-	if "name" in tokens:
-		ident.name = tokens["name"]
-	if "array_index" in tokens:
-		ident.index = tokens["array_index"]
-	if "swizzle" in tokens:
-		ident.swizzle = tokens["swizzle"]
-	return ident
-
-
-def new_declare(tokens):
-	if "qualifier" in tokens:
-		return Declare(tokens[0], tokens[1], tokens[2])
-	else:
-		return Declare(None, tokens[0], tokens[1])
-
-
-def new_assign(tokens):
-	if isinstance(tokens[0], Declare) and isinstance(tokens[1], Assignment):
-		d = tokens[0]
-		d.value = tokens[1]
-		return d
-
-
-def new_binary(tokens):
-	#print(">>>> {}".format(list(map(str, tokens))))
-	ops = "+ - * / > < >= <= == !=".split()
-	nested = 0
-	op = None
-	preced = False
-	param = []
-	binary = Binary(None, None, None)
-	for t in tokens:
-		if t == "(":
-			nested += 1
-			preced = True
-		elif t == ")":
-			nested -= 1
-		elif t in ops:
-			if nested == 0:
-				binary.operation = t
-				if preced:
-					try:
-						# if param is a Binary, add precedence
-						# should be single param
-						assert len(param) == 1
-						param[0].precedence = preced
-					except:
-						# log an assertion failed here
-						print(param)
-						raise
-				binary.param_left = param[0]
-				param = []
-				preced = False
-		else:
-			param.append(t)
-	assert len(param) == 1
-	binary.param_right = param[0]
-
-	return binary
-
-
-def new_if_block(tokens):
-	# check for the special case
-	if "discard_func" in tokens:
-		return InlineIf(tokens["discard_func"], "discard")
-	# determine whether its a if or an if/else
-	if_block = IfBlock(None, None, None)
-	if "if_block" in tokens:
-		if_block.comparison = tokens["if_comp"]
-		if_block.if_block = tokens["if_block"]
-		if "else_block" in tokens:
-			if_block.else_block = tokens["else_block"]
-
-	return if_block
 
 
 def parse(text):
@@ -433,6 +211,9 @@ def run_on_all(dir):
 					print(f"\nFAILED: {file_path}")
 					print(f"\t{pe}\n")
 					print(pe.markInputline())
+				except Exception as e:
+					print(f"\nERROR: {file_path}")
+					print(f"\t{e}\n")
 
 	print(f"{total} files | {failed} failed")
 
