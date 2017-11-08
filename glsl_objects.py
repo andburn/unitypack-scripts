@@ -189,7 +189,7 @@ class InlineIf:
 		return "if ({}) {};".format(self.function, self.command)
 
 
-# helper/factory functions for above classes
+# creator/factory functions for above classes
 
 
 def new_ident(tokens):

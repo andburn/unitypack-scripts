@@ -12,8 +12,8 @@ from pyparsing import (
 )
 from glsl_objects import (
 	Identifier, Define, Declare, Assignment, Function, Instruction, Unary,
-	Binary, IfBlock, new_ident, new_declare, new_assign, new_binary,
-	new_if_block
+	Binary, Ternary, FloatLiteral, IfBlock, new_ident, new_declare,
+	new_assign, new_binary,	new_if_block
 )
 
 LBRACE, RBRACE, LBRACK, RBRACK = map(Suppress, "{}[]")
@@ -55,7 +55,7 @@ def parse(text):
 
 	# constants
 	float_const = Combine(Optional(DASH) + Word(nums) + DOT + Word(nums))
-	float_const.setParseAction(lambda t : float(t[0]))
+	float_const.setParseAction(lambda t : FloatLiteral(t[0]))
 
 	int_const = Combine(Optional(DASH) + Word(nums))
 	int_const.setParseAction(lambda t : int(t[0]))
@@ -121,9 +121,12 @@ def parse(text):
 	function.setParseAction(lambda t : Function(t[0], t[1:]))
 	binary_operation.setParseAction(lambda t : new_binary(t))
 
-	comparison = operand + comparator + operand
 	# specific instance of ternary expressoin encountered
-	ternary_expr = LPAR + LPAR + comparison + RPAR + QUESTION + operand + COLON + operand + RPAR
+	ternary_expr = (
+		Suppress(LPAR) + Suppress(LPAR) + binary_operation + Suppress(RPAR)
+		+ QUESTION + operand + COLON + operand + Suppress(RPAR)
+	)
+	ternary_expr.setParseAction(lambda t : Ternary(t[0], t[1], t[2]))
 
 	expr = ternary_expr | binary_operation | unary_expr | function | ident_swizzle
 
@@ -207,7 +210,10 @@ def run_on_all(dir):
 				with open(file_path) as f:
 					contents = f.read()
 				try:
-					parse(contents)
+					result = parse(contents)
+					success = compare(contents, build(result))
+					if not success:
+						raise Exception(("Comparison Failed:", file_path))
 				except ParseException as pe:
 					failed += 1
 					print(f"\nFAILED: {file_path}")
@@ -220,37 +226,53 @@ def run_on_all(dir):
 	print(f"{total} files | {failed} failed")
 
 
+def remove_empty_trailing(lines):
+	for i in range(len(lines) - 1, 0, -1):
+		if not lines[i].strip():
+			del lines[i]
+		else:
+			break
+	return lines
+
+
 def compare(input, output):
-	left = input.split("\n")
-	right = output.split("\n")
+	left = remove_empty_trailing(input.split("\n"))
+	right = remove_empty_trailing(output.split("\n"))
 	num_lines = len(left)
 
 	if num_lines != len(right):
 		print("Mismatch in number of lines: {} != {}".format(num_lines, len(right)))
+		return False
 
 	for i in range(num_lines):
 		if left[i] != right[i]:
-			print("Lines are different at {}".format(i))
+			print("Lines are different at {}:".format(i))
 			print(" LEFT: {}".format(left[i]))
 			print("RIGHT: {}".format(right[i]))
-			break
+			return False
+
+	return True
 
 
 def main():
 	if len(sys.argv) < 3:
-		print("usage: glsl_parser <-s|-r> <file>")
+		print("usage: glsl_parser <-s|-r|-c> <file>")
 		return
 
 	filepath = sys.argv[2]
 
 	if sys.argv[1] == "-r":
 		run_on_all(filepath)
-	elif sys.argv[1] == '-s':
+	elif sys.argv[1] == '-s' or sys.argv[1] == '-c':
 		with open(filepath) as f:
 			contents = f.read()
 		try:
 			result = parse(contents)
-			compare(contents, build(result))
+			out_str = build(result)
+			if sys.argv[1] == '-c':
+				compare(contents, out_str)
+			else:
+				print(out_str)
 		except ParseException as pe:
 			print(pe)
 			print(pe.markInputline())
