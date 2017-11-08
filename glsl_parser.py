@@ -165,26 +165,28 @@ def parse(text):
 	return parser.parseString(text)
 
 
-def output(parsed, tab="\t"):
-	print(f"#version {parsed.version}")
+def build(parsed, tab="\t"):
+	output = []
+	output.append("#version {}".format(parsed.version))
 
 	for decl in parsed.declarations:
-		print("{!s}".format(decl))
+		output.append("{!s}".format(decl))
 
-	print("\nvoid main()\n{")
+	output.append("\nvoid main()\n{")
 	for ins in parsed.instructions:
 		if isinstance(ins, IfBlock):
-			print("{}{} {{".format(tab, ins))
+			output.append("{}{} {{".format(tab, ins))
 			for inner_ins in ins.if_block:
-				print("{0}{0}{1}".format(tab, inner_ins))
+				output.append("{0}{0}{1}".format(tab, inner_ins))
 			if ins.else_block:
-				print("{}}} else {{".format(tab))
+				output.append("{}}} else {{".format(tab))
 				for inner_ins in ins.else_block:
-					print("{0}{0}{1}".format(tab, inner_ins))
-			print("{}}}".format(tab))
+					output.append("{0}{0}{1}".format(tab, inner_ins))
+			output.append("{}}}".format(tab))
 		else:
-			print("{}{!s}".format(tab, ins))
-	print("}")
+			output.append("{}{!s}".format(tab, ins))
+	output.append("}")
+	return "\n".join(output)
 
 
 def run_on_all(dir):
@@ -218,6 +220,22 @@ def run_on_all(dir):
 	print(f"{total} files | {failed} failed")
 
 
+def compare(input, output):
+	left = input.split("\n")
+	right = output.split("\n")
+	num_lines = len(left)
+
+	if num_lines != len(right):
+		print("Mismatch in number of lines: {} != {}".format(num_lines, len(right)))
+
+	for i in range(num_lines):
+		if left[i] != right[i]:
+			print("Lines are different at {}".format(i))
+			print(" LEFT: {}".format(left[i]))
+			print("RIGHT: {}".format(right[i]))
+			break
+
+
 def main():
 	if len(sys.argv) < 3:
 		print("usage: glsl_parser <-s|-r> <file>")
@@ -232,7 +250,7 @@ def main():
 			contents = f.read()
 		try:
 			result = parse(contents)
-			output(result)
+			compare(contents, build(result))
 		except ParseException as pe:
 			print(pe)
 			print(pe.markInputline())
