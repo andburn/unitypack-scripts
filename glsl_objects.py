@@ -8,7 +8,7 @@ class Identifier:
 
 	def __repr__(self):
 		r = ["Ident(name=", self.name]
-		if self.index:
+		if self.index != None:
 			r.append(", index={}".format(self.index))
 		if self.swizzle:
 			r.append(", swizzle={}".format(self.swizzle))
@@ -17,7 +17,7 @@ class Identifier:
 
 	def __str__(self):
 		s = [self.name]
-		if self.index:
+		if self.index != None:
 			s.extend(["[", str(self.index), "]"])
 		if self.swizzle:
 			s.extend([".", self.swizzle])
@@ -30,7 +30,7 @@ class Define:
 		self.dest = dest
 
 	def __repr__(self):
-		return "Define(dest={} src={})".format(self.dest, self.src)
+		return "Define(dest={!r} src={!r})".format(self.dest, self.src)
 
 	def __str__(self):
 		return "#define {} {}".format(self.dest, self.src)
@@ -44,7 +44,7 @@ class Declare:
 		self.value = value
 
 	def __repr__(self):
-		return "Declare(qual={} type={} ident={} value={})".format(
+		return "Declare(qual={} type={} ident={!r} value={!r})".format(
 			self.qualifier, self.type, self.ident, self.value)
 
 	def __str__(self):
@@ -64,7 +64,7 @@ class Assignment:
 		self.value = value
 
 	def __repr__(self):
-		return "Assign(type={}, value={})".format(self.type, self.value)
+		return "Assign(type={}, value={!r})".format(self.type, self.value)
 
 	def __str__(self):
 		values = ", ".join(map(str, self.value))
@@ -77,7 +77,7 @@ class Function:
 		self.params = params
 
 	def __repr__(self):
-		return "Func(name={}, params={})".format(self.name, self.params)
+		return "Func(name={}, params={!r})".format(self.name, self.params)
 
 	def __str__(self):
 		return "{}({})".format(self.name, ", ".join(map(str, self.params)))
@@ -89,7 +89,7 @@ class Instruction:
 		self.expression = expr
 
 	def __repr__(self):
-		return "Ins(ident={}, expr={})".format(self.ident, self.expression)
+		return "Ins(ident={!r}, expr={!r})".format(self.ident, self.expression)
 
 	def __str__(self):
 		return "{} = {};".format(self.ident, " ".join(map(str, self.expression)))
@@ -101,7 +101,7 @@ class Unary:
 		self.param = param
 
 	def __repr__(self):
-		return "Unary(op={}, expr={})".format(self.operation, self.param)
+		return "Unary(op={}, expr={!r})".format(self.operation, self.param)
 
 	def __str__(self):
 		return "{}{}".format(self.operation, self.param)
@@ -115,7 +115,7 @@ class Binary:
 		self.precedence = precedence
 
 	def __repr__(self):
-		return "Binary(op={} pl={} pr={} prec={})".format(
+		return "Binary(op={} pl={!r} pr={!r} prec={})".format(
 			self.operation, self.param_left,
 			self.param_right, self.precedence)
 
@@ -129,6 +129,40 @@ class Binary:
 			)
 
 
+class Ternary:
+	def __init__(self, cond, expr_true, expr_false):
+		self.condition = cond
+		self.expr_true = expr_true
+		self.expr_false = expr_false
+
+	def __repr__(self):
+		return "Ternary(codn={!r} true={!r} false={!r})".format(
+			self.condition, self.expr_true, self.expr_false)
+
+	def __str__(self):
+		return "(({}) ? {} : {})".format(
+				self.condition,
+				self.expr_true,
+				self.expr_false,
+			)
+
+
+class FloatLiteral:
+	"""Want to keep the string for equivalence (i.e. scientific notation)"""
+	def __init__(self, string):
+		self.value = float(string)
+		self.string = string
+
+	def __repr__(self):
+		return "Float(v={}, s={})".format(self.value, self.string)
+
+	def __str__(self):
+		if self.string:
+			return self.string
+		else:
+			return str(self.value)
+
+
 class IfBlock:
 	def __init__(self, comp, if_block, else_block):
 		self.comparison = comp
@@ -136,7 +170,7 @@ class IfBlock:
 		self.else_block = else_block
 
 	def __repr__(self):
-		return "If(comp={}, if={}, else={})".format(
+		return "If(comp={!r}, if={}, else={})".format(
 			self.comparison, self.if_block, self.else_block)
 
 	def __str__(self):
