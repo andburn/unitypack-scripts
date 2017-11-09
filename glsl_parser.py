@@ -26,6 +26,8 @@ LESS, GREAT, LPAR, RPAR, BANG = map(Literal, "<>()!")
 def parse(text):
 	"""Run the parser on the given text"""
 
+	idents = {} # store all identifiers
+
 	# arithmetic and boolean operators
 	algebraic_operator = PLUS | DASH | ASTERIX | SLASH
 	comparator = (
@@ -73,7 +75,7 @@ def parse(text):
 	# swizzle
 	swizzle = Suppress(DOT) + Word("xyzw", min=1, max=4)
 	ident_swizzle = identifier + Optional(swizzle).setResultsName("swizzle")
-	ident_swizzle.setParseAction(lambda t : new_ident(t))
+	ident_swizzle.setParseAction(lambda t : new_ident(t, idents))
 
 	# define macros
 	definition = Suppress("#define") + ident_swizzle + ident_swizzle
@@ -165,7 +167,7 @@ def parse(text):
 		+ main_function + StringEnd()
 	)
 
-	return parser.parseString(text)
+	return (parser.parseString(text), idents)
 
 
 def build(parsed, tab="\t"):
@@ -267,7 +269,7 @@ def main():
 		with open(filepath) as f:
 			contents = f.read()
 		try:
-			result = parse(contents)
+			result, idents = parse(contents)
 			out_str = build(result)
 			if sys.argv[1] == '-c':
 				compare(contents, out_str)

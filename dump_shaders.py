@@ -21,6 +21,7 @@ def main():
 	p = ArgumentParser()
 	p.add_argument("input")
 	p.add_argument("output")
+	p.add_argument("--only")
 	p.add_argument("--raw", action="store_true")
 	p.add_argument("-qq", action="store_true")
 	p.add_argument("-q", action="store_true")
@@ -47,12 +48,13 @@ def main():
 				try:
 					if obj.type == "Shader":
 						d = obj.read()
-						save_path = os.path.join(
-							args.output,
-							bundle_name,
-							obj.type
-						)
-						extract_shader(d, save_path, args.raw)
+						if not args.only or (args.only and args.only in d.parsed_form.name):
+							save_path = os.path.join(
+								args.output,
+								bundle_name,
+								obj.type
+							)
+							extract_shader(d, save_path, args.raw)
 				except Exception as e:
 					error("{0} ({1})".format(e, bundle_name))
 

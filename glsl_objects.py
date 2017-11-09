@@ -192,7 +192,7 @@ class InlineIf:
 # creator/factory functions for above classes
 
 
-def new_ident(tokens):
+def new_ident(tokens, store):
 	ident = Identifier(None, None, None)
 	if "name" in tokens:
 		ident.name = tokens["name"]
@@ -200,6 +200,10 @@ def new_ident(tokens):
 		ident.index = int(tokens["array_index"][0])
 	if "swizzle" in tokens and len(tokens["swizzle"]) == 1:
 		ident.swizzle = tokens["swizzle"][0]
+	if not ident.name in store:
+		store[ident.name] = [ident]
+	else:
+		store[ident.name].append(ident)
 	return ident
 
 

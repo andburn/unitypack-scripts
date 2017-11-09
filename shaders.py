@@ -8,6 +8,7 @@ import unitypack
 from unitypack.engine.object import field
 import mojoparser
 import utils
+import glsl_parser
 
 
 (debug, info, error) = utils.Echo.echo()
@@ -83,87 +84,103 @@ def shader_has_compatible_props(obj):
 		return False
 
 
-class UniformSymbol:
-	def __init__(self, name, type, index):
-		self.name = name.decode("ascii")
-		self.type = type
-		self.index = index
+def convert_register_set(register_set):
+	set_text = ""
+	if register_set == mojoparser.SymbolRegisterSet.BOOL:
+		set_text = "bool"
+	elif register_set == mojoparser.SymbolRegisterSet.INT4:
+		set_text = "ivec4"
+	elif register_set == mojoparser.SymbolRegisterSet.FLOAT4:
+		set_text = "vec4"
+	elif register_set == mojoparser.SymbolRegisterSet.SAMPLER:
+		set_text = "sampler2D"
+	return set_text
 
-	def __str__(self):
-		return "%s %d [%d]" % (self.name, self.type, self.index)
 
-	def str_assign(self):
-		return "uniform vec4 %s;" % (self.name)
+class SymbolMap:
+	def __init__(self, id, name, expr):
+		self.id = id
+		self.name = name
+		self.expr = expr
 
-	def str_define(self, is_pixel_shader=False):
-		prefix = "ps" if is_pixel_shader else "vs"
-		return "#define %s_c%d %s" % (prefix, self.index, self.name)
+	def __repr__(self):
+		return "SymbolMap(id={}, name={}, expr={})".format(
+			self.id, self.name, self.expr
+		)
 
-def extract_shader_attributes(parsed):
-	defs = []
-	symbols = []
-	tex_symbols = []
 
-	is_pixel = True if parsed.shader_type == mojoparser.ShaderType.PIXEL else False
+def create_attribute_map(parsed):
+	"""Create a map of generated symbol names to actual symbol names"""
 
-	defs.append("//-- %d Uniforms" % (parsed.uniform_count))
-	defs.append("//-- %d Constants" % (parsed.constant_count))
-	defs.append("//-- %d Samplers" % (parsed.sampler_count))
-	defs.append("//-- %d Attributes" % (parsed.attribute_count))
-	defs.append("//-- %d Outputs" % (parsed.output_count))
-	defs.append("//-- %d Swizzles" % (parsed.swizzle_count))
-	defs.append("//-- %d Symbols\n" % (parsed.symbol_count))
+	symbol_map = {}
+	uniform_mat_ids = []
 
-	defs.append("//-- %d Symbols" % (parsed.symbol_count))
-	for j in range(parsed.symbol_count):
-		sym = UniformSymbol(
-			parsed.symbols[j].name,
-			parsed.symbols[j].register_set,
-			parsed.symbols[j].register_index)
-		defs.append("// %s" % (str(sym)))
-		if parsed.symbols[j].register_set == mojoparser.SymbolRegisterSet.SAMPLER:
-			tex_symbols.append(sym)
+	is_frag = False
+	if parsed.shader_type == mojoparser.ShaderType.PIXEL:
+		is_frag = True
+
+	for i in range(parsed.symbol_count):
+		is_sampler = parsed.symbols[i].register_set == mojoparser.SymbolRegisterSet.SAMPLER
+		index = parsed.symbols[i].register_index
+		id = "{}_{}{}".format(
+			"ps" if is_frag else "vs",
+			"s" if is_sampler else "c",
+			index,
+		)
+		name = parsed.symbols[i].name.decode("utf-8")
+		type = convert_register_set(parsed.symbols[i].register_set)
+		# XXX yuck!
+		# the unity uniforms are matrices, but are used as 4 column vectors
+		if name[:6] == "unity_":
+			type = "mat4"
+			# store the uniforms that are part of this matrix
+			for r in range(index, index + 4):
+				uniform_mat_ids.append("vs_c{}".format(r))
+		exp = "uniform {} {};".format(type, name,)
+		symbol_map[id] = SymbolMap(id, name, exp)
+
+	for i in range(parsed.output_count):
+		id = parsed.outputs[i].name.decode("utf-8")
+		usage = mojoparser.Usage(parsed.outputs[i].usage)
+		if usage == mojoparser.Usage.POSITION:
+			name = "gl_Position"
+			exp = None
+		elif usage == mojoparser.Usage.TEXCOORD:
+			name = "_TexCoord{}".format(parsed.outputs[i].index)
+			exp = "varying vec2 {};".format(name)
 		else:
-			symbols.append(sym)
-	symbols.sort(key=attrgetter("index"))
-	tex_symbols.sort(key=attrgetter("index"))
-	defs = defs + [s.str_assign() for s in symbols] \
-		+ [s.str_define(is_pixel) for s in symbols] \
-		+ ["//-- Samplers"] + [str(s) for s in tex_symbols]
+			# XXX probably!
+			name = "gl_FragColor"
+			exp = None
+		symbol_map[id] = SymbolMap(id, name, exp)
 
-	defs.append("//-- %d Attributes" % (parsed.attribute_count))
-	for j in range(parsed.attribute_count):
-		defs.append("// %s %s %d" % (
-			parsed.attributes[j].name,
-			mojoparser.Usage(parsed.attributes[j].usage),
-			parsed.attributes[j].index))
+	for i in range(parsed.attribute_count):
+		id = parsed.attributes[i].name.decode("utf-8")
+		usage = mojoparser.Usage(parsed.attributes[i].usage)
+		if usage == mojoparser.Usage.POSITION:
+			name = "position"
+			exp = "attribute vec2 position;"
+		elif usage == mojoparser.Usage.TEXCOORD:
+			idx = parsed.attributes[i].index
+			name = "uv{}".format(idx + 1 if idx > 0 else "")
+			exp = "attribute vec2 {};".format(name)
+		else:
+			raise AttributeError("Unable to handle " + id)
+		symbol_map[id] = SymbolMap(id, name, exp)
 
-	defs.append("//-- %d Uniforms" % (parsed.uniform_count))
-	for j in range(parsed.uniform_count):
-		defs.append("// %s %s %d %d %d" % (
-			parsed.uniforms[j].name,
-			mojoparser.UniformType(parsed.uniforms[j].type),
-			parsed.uniforms[j].array_count, parsed.uniforms[j].index,
-			parsed.uniforms[j].constant))
+	# sanity check on uniforms
+	for i in range(parsed.uniform_count):
+		name = parsed.uniforms[i].name.decode("utf-8")
+		if not name in symbol_map and not name in uniform_mat_ids:
+			id = parsed.uniforms[i].index
+			new_name = "_Unkown{}".format(id)
+			print("symbol for uniform '{}' [{}] not found".format(name, index))
+			# TODO only 'vs_c255' falls in here, where is it coming from?
+			# this looks to be some sort of error in mojoparser
+			# set is to identity vector for now
+			symbol_map[name] = SymbolMap(name, new_name, "uniform vec4 {};".format(new_name))
 
-	defs.append("//-- %d Constants" % (parsed.constant_count))
-	for j in range(parsed.constant_count):
-		defs.append("// %s %d" % (
-			mojoparser.UniformType(parsed.constants[j].type),
-			parsed.constants[j].index))
-		#print(*parsed.constants[j].value.f)
-		#print(*parsed.constants[j].value.i)
-		#print(parsed.constants[j].value.b)
-
-	defs.append("//-- %d Outputs" % (parsed.output_count))
-	for j in range(parsed.output_count):
-		defs.append("// %s %s %d" % (
-			parsed.outputs[j].name,
-			mojoparser.Usage(parsed.outputs[j].usage),
-			parsed.outputs[j].index))
-
-
-	return "\n".join(defs) + "\n\n" + str(parsed).replace("\n", "")
+	return symbol_map
 
 
 def extract_shader(shader, dir, raw=False):
@@ -250,11 +267,11 @@ def extract_shader(shader, dir, raw=False):
 			# write DX9 shaders to file
 			if stype.api == API.D3D9:
 				utils.write_to_file(filename + ext, str(parsed_data))
+				# get shader attribute data, from parsed bytecode
+				symbol_map = create_attribute_map(parsed_data)
 			# write keywords to file
 			if keywords:
 				utils.write_to_file(filename + ".tags", "\n".join(keywords))
-			# debug shader attribute data, from parsed bytecode
-			debug(extract_shader_attributes(parsed_data))
 			# write full subshader blob
 			if raw:
 				utils.write_to_file(filename + ".bin", sub_bytes, "wb")
