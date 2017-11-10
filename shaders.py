@@ -9,6 +9,7 @@ from unitypack.engine.object import field
 import mojoparser
 import utils
 import glsl_parser
+from glsl_objects import Define, Declare, Assignment
 
 
 (debug, info, error) = utils.Echo.echo()
@@ -183,6 +184,38 @@ def create_attribute_map(parsed):
 	return symbol_map
 
 
+def clean_up(parsed_data, tags):
+	# get shader attribute data, from the parsed data
+	symbol_map = create_attribute_map(parsed_data)
+	# pass through a text parser, for fine tuning
+	parsed_glsl, idents = glsl_parser.parse(str(parsed_data))
+	# replace declarations
+	declarations = []
+	for d in parsed_glsl.declarations:
+		if isinstance(d, Define):
+			if "ps_v" in d.dest.name and not d.dest.name in symbol_map:
+				id = d.dest.name[4:]
+				name = "_TexCoord" + id
+				symbol_map[d.dest.name] = SymbolMap(
+					d.dest.name, name,
+					"varying vec2 {};".format(name)
+				)
+			continue
+		elif isinstance(d, Declare) and (d.qualifier == "uniform" or d.qualifier == "attribute"):
+			continue
+		else:
+			declarations.append("{!s}".format(d))
+	# fix symbols/uniforms/attributes
+	for id, sym in symbol_map.items():
+		if id in idents:
+			for i in idents[id]:
+				i.name = sym.name
+		if sym.expr:
+			declarations.append(sym.expr)
+
+	return glsl_parser.build(parsed_glsl, version="300", keywords=tags, declarations=declarations)
+
+
 def extract_shader(shader, dir, raw=False):
 	if not shader_has_compatible_props(shader):
 		error("The shader asset has an unsupported format")
@@ -264,11 +297,12 @@ def extract_shader(shader, dir, raw=False):
 			# set the filename
 			filename = os.path.join(path, f"{name}.{stype.api}.{offset}")
 			ext = ".vert" if stype.program == Program.VERTEX else ".frag"
-			# write DX9 shaders to file
+			# process DX9 shaders only
 			if stype.api == API.D3D9:
-				utils.write_to_file(filename + ext, str(parsed_data))
-				# get shader attribute data, from parsed bytecode
-				symbol_map = create_attribute_map(parsed_data)
+				# final clean up to prepare glsl for webgl
+				prog_text = clean_up(parsed_data, keywords)
+				# write to file
+				utils.write_to_file(filename + ext, prog_text)
 			# write keywords to file
 			if keywords:
 				utils.write_to_file(filename + ".tags", "\n".join(keywords))

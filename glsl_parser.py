@@ -169,13 +169,26 @@ def parse(text):
 
 	return (parser.parseString(text), idents)
 
-
-def build(parsed, tab="\t"):
+# TODO move this to shaders.py
+def build(parsed, tab="\t", version=None, keywords=None, declarations=None):
 	output = []
-	output.append("#version {}".format(parsed.version))
 
-	for decl in parsed.declarations:
-		output.append("{!s}".format(decl))
+	# add any keywords/tags as a comment at top of the file
+	if keywords:
+		comment = "// KEYWORDS {}".format(" ".join(keywords))
+		output.append(comment)
+
+	# allow the parsed version to be overwritten
+	output.append("#version {}".format(
+		version if version else parsed.version
+	))
+
+	# used customized declarations string if available
+	if declarations:
+		output.extend(declarations)
+	else:
+		for decl in parsed.declarations:
+			output.append("{!s}".format(decl))
 
 	output.append("\nvoid main()\n{")
 	for ins in parsed.instructions:

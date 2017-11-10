@@ -25,6 +25,7 @@ def main():
 	p.add_argument("--raw", action="store_true")
 	p.add_argument("-qq", action="store_true")
 	p.add_argument("-q", action="store_true")
+	p.add_argument("--trace", action="store_true")
 	args = p.parse_args(sys.argv[1:])
 
 	utils.Echo.quiet = args.q
@@ -57,6 +58,8 @@ def main():
 							extract_shader(d, save_path, args.raw)
 				except Exception as e:
 					error("{0} ({1})".format(e, bundle_name))
+					if args.trace:
+						raise
 
 if __name__ == "__main__":
 	main()
